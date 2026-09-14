@@ -1,6 +1,7 @@
 "use client";
 import CardHandles from "./card-handles";
 import BrandLogo from "./brand-logo";
+import SlideGrid from "./slide-grid";
 import {useBackgrounds,backgroundLabels,defaultBackground} from "./use-backgrounds";
 import {FreeObjects,textCss} from "./free-objects";
 import {ObjectPanel,TextStyleControls,uploadImage} from "./object-panel";
@@ -21,6 +22,7 @@ import {
   Sparkles,
   History,
   PanelLeft,
+  LayoutGrid,
   Lock,
   MousePointer2,
   Type,
@@ -436,6 +438,7 @@ export function SlideThumbnail({slide,index,total}:{slide:Slide;index:number;tot
 }
 export default function Home({ deckId = "legacy" }: { deckId?: string }) {
   const [slidesCollapsed,setSlidesCollapsed]=useState(false);
+  const [gridOpen,setGridOpen]=useState(false);
   const backgrounds=useBackgrounds();
   const [panelWidths, setPanelWidths] = useState({ left: 226, right: 302 });
   const [frameSize, setFrameSize] = useState(100);
@@ -1462,6 +1465,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
   </div>;
   return (
     <div className="studio" onKeyDown={clipboardShortcut} onCopy={copySelection} onPaste={pasteSelection}>
+      {gridOpen&&<SlideGrid slides={work.deck.slides.map(s=>drafts[s.id]??s)} selected={selected} onClose={()=>setGridOpen(false)} onSelect={i=>{setSelected(i);setReplay(r=>r+1);}} thumbnail={(s,i)=><SlideThumbnail slide={s} index={i} total={work.deck.slides.length}/>}/>}
       {objectBusy&&<div role="status" className="upload-status">画像を読み込んでいます…</div>}
       <header className="topbar">
         <div className="brand">
@@ -1956,6 +1960,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
               <span className="status-version">· v{work.version}</span>
             </span>
             <span>
+              <button type="button" className="grid-view-toggle" aria-label="グリッドビュー" title="グリッドビュー" onClick={()=>setGridOpen(true)}><LayoutGrid size={17}/><span>一覧表示</span></button>
               ← → スライド移動{" "}
               <span className="status-version">· M マーカー</span>
             </span>
