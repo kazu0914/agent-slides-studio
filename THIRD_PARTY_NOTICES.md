@@ -14,4 +14,4 @@ PPTXの取り込みには fflate（MIT）と @xmldom/xmldom（MIT）を使用し
 
 アプリのロゴは開発者提供の画像（申告された生成ツール: GPT-images 2.5）を使用しています。
 
-公開用背景 `public/backgrounds/public-blue.png`、`public-green.png`、`public-orange.png` は、開発者kazu0914がChatGPTで生成して公開用に提供した画像です。本プロジェクトのMITライセンスの条件で再配布できます。生成用プロンプトはアプリに同梱していません。
+公開用背景 `public/backgrounds/public-blue.png`、`public-green.png`、`public-orange.png`、`public-sunshine.png`、`public-hearts.png` は、開発者kazu0914がChatGPTで生成して公開用に提供した画像です。本プロジェクトのMITライセンスの条件で再配布できます。生成用プロンプトはアプリに同梱していません。

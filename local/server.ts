@@ -212,7 +212,7 @@ createServer(async (req, res) => {
         return json(await repo.save(user, { ...input, deck }, id));
       }
     }
-    if(url.pathname==='/api/backgrounds'&&req.method==='GET')return json(['public-blue','public-green','public-orange',...[1,2,3,4,5,6].map(n=>'bg_'+n)].filter(id=>existsSync(resolve(root,'backgrounds',id+'.png'))));
+    if(url.pathname==='/api/backgrounds'&&req.method==='GET')return json(['public-blue','public-green','public-orange','public-sunshine','public-hearts',...[1,2,3,4,5,6].map(n=>'bg_'+n)].filter(id=>existsSync(resolve(root,'backgrounds',id+'.png'))));
     if(url.pathname==='/api/templates'){
       if(req.method==='GET')return json(sqlite.prepare('SELECT * FROM templates ORDER BY created_at DESC').all().map((t:any)=>({id:t.id,name:t.name,deck:JSON.parse(t.snapshot)})));
       if(req.method==='POST'){const t=z.object({name:z.string().trim().min(1).max(80),deck:deckSchema}).parse(body);const templateId=crypto.randomUUID();sqlite.prepare('INSERT INTO templates VALUES(?,?,?,?)').run(templateId,t.name,JSON.stringify(t.deck),new Date().toISOString());return json({id:templateId});}

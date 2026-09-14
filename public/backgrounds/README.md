@@ -1,6 +1,6 @@
 # Backgrounds
 
-Public blue, green and orange backgrounds are included under this project's MIT license.
+Public blue, green, orange, sunshine and hearts backgrounds are included under this project's MIT license.
 See THIRD_PARTY_NOTICES.md for their provenance.
 
 For private use, add PNG images named bg_1.png through bg_6.png here and rebuild.
