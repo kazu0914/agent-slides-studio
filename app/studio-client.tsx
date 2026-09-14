@@ -1,7 +1,7 @@
 "use client";
 import CardHandles from "./card-handles";
 import BrandLogo from "./brand-logo";
-import {useBackgrounds,backgroundLabels} from "./use-backgrounds";
+import {useBackgrounds,backgroundLabels,defaultBackground} from "./use-backgrounds";
 import {FreeObjects,textCss} from "./free-objects";
 import {ObjectPanel,TextStyleControls,uploadImage} from "./object-panel";
 import {makeObject,objectSchema,type SlideObject} from "@/lib/objects";
@@ -1123,14 +1123,23 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
       .catch(e => {setAutosaveError((e as Error).message);setPresentAfterSave(false);});
   }
   const editingGesture=useRef(false);
+  const composingText=useRef(false);
   useEffect(()=>{
     const begin=()=>{editingGesture.current=true;};const end=()=>{editingGesture.current=false;};
+    const compositionStart=()=>{composingText.current=true;};const compositionEnd=()=>{composingText.current=false;};
+    document.addEventListener('compositionstart',compositionStart);document.addEventListener('compositionend',compositionEnd);
+    window.addEventListener('blur',compositionEnd);
     window.addEventListener('pointerdown',begin);window.addEventListener('pointerup',end);window.addEventListener('pointercancel',end);window.addEventListener('blur',end);
-    return()=>{window.removeEventListener('pointerdown',begin);window.removeEventListener('pointerup',end);window.removeEventListener('pointercancel',end);window.removeEventListener('blur',end);};
+    return()=>{document.removeEventListener('compositionstart',compositionStart);document.removeEventListener('compositionend',compositionEnd);window.removeEventListener('blur',compositionEnd);window.removeEventListener('pointerdown',begin);window.removeEventListener('pointerup',end);window.removeEventListener('pointercancel',end);window.removeEventListener('blur',end);};
   },[]);
   useEffect(()=>{
     if(locked||autosaveError||draftError.startsWith("同じ箇所")||present||!Object.keys(drafts).length)return;
-    const timer=setInterval(()=>{if(!editingGesture.current)applyDraft(Object.keys(drafts)[0]);},1000);
+    const timer=setInterval(()=>{
+      // 入力中の保存ロックで、カーソルやIMEの変換状態を失わないようにする。
+      const active=document.activeElement as HTMLElement|null;
+      const typing=active?.isContentEditable||active?.matches('textarea,input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit])');
+      if(!editingGesture.current&&!composingText.current&&!typing)applyDraft(Object.keys(drafts)[0]);
+    },1000);
     return()=>clearInterval(timer);
   },[drafts,locked,draftError,autosaveError,present]);
   function deleteSelectedSlide() {
@@ -1183,6 +1192,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
     next.slides.push({
       id,
       title: "新しいアイデア",
+      backgroundTemplate: defaultBackground(backgrounds),
       body: "伝えたいことを、ここから。",
       eyebrow: "YOUR NEXT IDEA",
       layout: "statement",

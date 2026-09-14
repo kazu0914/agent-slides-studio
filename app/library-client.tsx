@@ -1,4 +1,5 @@
 "use client";
+import {useBackgrounds,defaultBackground} from "./use-backgrounds";
 import BrandLogo from "./brand-logo";
 import { useEffect, useState, useRef } from "react";
 import {
@@ -23,6 +24,7 @@ type Entry = {
   updatedAt: string;
 };
 export default function Library() {
+  const backgrounds=useBackgrounds();
   const [entries, setEntries] = useState<Entry[]>([]),
     [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
@@ -141,6 +143,7 @@ export default function Library() {
                 slides: [
                   {
                     ...initialDeck.slides[0],
+                    backgroundTemplate: defaultBackground(backgrounds),
                     id: crypto.randomUUID(),
                     title: "ここから、始めよう。",
                     eyebrow: "NEW PRESENTATION",
