@@ -19,7 +19,7 @@ export const slideSchema = z.object({
   backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   backgroundTemplate: z.enum(["none", "bg_1", "bg_2", "bg_3", "bg_4", "bg_5", "bg_6"]).optional(),
   animation: z.enum(["orbit", "reveal", "none"]),
-  artworkKind: z.enum(["holo-cards",'holo-chart','holo-network','holo-flow','holo-grid','holo-document','holo-shield','holo-cloud','holo-compare','holo-timeline', "orbit", "arrow", "none", "cube", "globe", "rings", "helix", "crystal", "wave", "particles", "pulse", "bars"]).optional(),
+  artworkKind: z.enum(["holo-cards",'holo-database','holo-server','holo-target','holo-funnel','holo-pyramid','holo-solar','holo-gears','holo-platform','holo-honeycomb','holo-equalizer','holo-prism','holo-chart','holo-network','holo-flow','holo-grid','holo-document','holo-shield','holo-cloud','holo-compare','holo-timeline', "orbit", "arrow", "none", "cube", "globe", "rings", "helix", "crystal", "wave", "particles", "pulse", "bars"]).optional(),
   revealSteps:z.object({title:z.number().int().min(0).max(100).optional(),body:z.number().int().min(0).max(100).optional(),eyebrow:z.number().int().min(0).max(100).optional(),items:z.number().int().min(0).max(100).optional(),artwork:z.number().int().min(0).max(100).optional()}).optional(),
   notes: z.string().max(4000),
   objects: z.array(objectSchema).max(100).optional(),
@@ -44,6 +44,7 @@ export const slideSchema = z.object({
       ),
     )
     .optional(),
+  arrowWidth:z.number().min(1).max(24).optional(),
   artworkColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   animationDuration: z.number().min(2).max(120).optional(),
   items: z
@@ -89,6 +90,7 @@ export const fieldNames: Record<string, string> = {
   backgroundTemplate: "背景テンプレート",
   animation: "アニメーション",
   artworkKind: "装飾の追加・削除",
+  arrowWidth: "矢印の太さ",
   artworkColor: "アニメーションの色",
   notes: "ノート",
   revealSteps:"クリック表示の順番",

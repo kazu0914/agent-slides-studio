@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360">
+  <g fill="none" stroke="#2454ef" stroke-width="5">
+    <circle cx="320" cy="180" r="65" opacity=".7">
+      <animate attributeName="r" values="65;125;65" dur="4s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".7;.15;.7" dur="4s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="320" cy="180" r="48" fill="#edf3ff"/>
+    <g><circle cx="405" cy="180" r="12" fill="#2454ef"/>
+      <animateTransform attributeName="transform" type="rotate" from="0 320 180" to="360 320 180" dur="4s" repeatCount="indefinite"/>
+    </g>
+  </g>
+</svg>

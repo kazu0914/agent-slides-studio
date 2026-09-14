@@ -10,12 +10,25 @@ export function TextStyleControls({style,onChange}:{style:TextStyle;onChange:(s:
  <label>行間<input type="range" aria-label="行間" min=".8" max="3" step=".1" value={style.lineHeight||1.5} onChange={e=>onChange({...style,lineHeight:Number(e.target.value)})}/></label>
  </div>;}
 export function ObjectPanel({objects,selected,onSelect,onChange,onError,onImage}:{objects:SlideObject[];selected:string[];onSelect:(ids:string[])=>void;onChange:(objects:SlideObject[])=>void;onError:(message:string)=>void;onImage:(file:File,replaceId?:string)=>Promise<void>}){
+ const svgFile=useRef<HTMLInputElement>(null);
  const file=useRef<HTMLInputElement>(null),replace=useRef(false);const [busy,setBusy]=useState(false),[csv,setCsv]=useState('');const object=objects.find(o=>o.id===selected[0]);
  function change(patch:Partial<SlideObject>){onChange(objects.map(o=>selected.includes(o.id)&&!o.locked?{...o,...patch}:o));}
  function add(kind:SlideObject['kind']){const o=makeObject(kind);o.x+=Math.min(objects.length,12)*24;o.y+=Math.min(objects.length,12)*16;onChange([...objects,o]);onSelect([o.id]);}
+ async function addSvg(file:File){
+  try{
+   if(file.size>100000)throw Error('SVGは100KB以下にしてください');
+   const source=await file.text();const xml=new DOMParser().parseFromString(source,'image/svg+xml');
+   if(xml.querySelector('parsererror')||xml.documentElement.localName!=='svg')throw Error('有効なSVGファイルを選んでください');
+   if(xml.querySelector('script,foreignObject')||/<!DOCTYPE|<!ENTITY/i.test(source))throw Error('スクリプトや外部文書を含まないSVGを選んでください');
+   for(const el of Array.from(xml.querySelectorAll('*')))for(const attr of Array.from(el.attributes)){if(/^on/i.test(attr.name)||((attr.localName==='href')&&!attr.value.startsWith('#')))throw Error('イベント処理や外部参照を含まないSVGを選んでください');}
+   if(objects.length>=100)throw Error('要素は100個までです');
+   const o={...makeObject('motion'),name:file.name.replace(/\.svg$/i,'').slice(0,100),customSvg:source,w:640,h:360};onChange([...objects,o]);onSelect([o.id]);
+  }catch(e){onError((e as Error).message);}
+ }
  function layer(direction:number){if(!object)return;const next=[...objects],i=next.findIndex(o=>o.id===object.id),j=Math.max(0,Math.min(next.length-1,i+direction));[next[i],next[j]]=[next[j],next[i]];onChange(next);}
  async function image(file:File){setBusy(true);try{await onImage(file,replace.current?object?.id:undefined);}catch(e){onError((e as Error).message);}finally{setBusy(false);replace.current=false;}}
  return <section className="object-panel">
+ <button type="button" onClick={()=>svgFile.current?.click()} disabled={objects.length>=100}>自作SVGアニメーションを追加</button><input ref={svgFile} type="file" accept=".svg,image/svg+xml" hidden aria-label="自作SVGファイル" onChange={e=>{if(e.target.files?.[0])void addSvg(e.target.files[0]);e.target.value='';}}/><p>SVGの動きをそのまま取り込みます。<a href="/samples/custom-motion.svg" download>サンプルSVG</a>を編集して作成できます。</p>
  <h3>挿入・レイヤー</h3><p>画像はキャンバスへドロップ、または ⌘V で貼り付け。文字はダブルクリックで直接編集できます。</p>
  <button type="button" className="object-image-upload" disabled={busy||objects.length>=100} onClick={()=>{replace.current=false;file.current?.click();}}><span>＋</span><span>{busy?"画像を読み込み中…":"画像を選んで追加"}<small>PNG・JPEG・WebP / ドロップ・⌘V にも対応</small></span></button><input ref={file} type="file" hidden accept="image/png,image/jpeg,image/webp" onChange={e=>{if(e.target.files?.[0])void image(e.target.files[0]);e.target.value='';}}/>
  <div className="object-insert">{(['text','shape','table','chart','motion'] as const).map((kind,i)=><button type="button" key={kind} disabled={objects.length>=100} onClick={()=>add(kind)}>{['＋ テキスト','＋ 図形','＋ 表','＋ グラフ','＋ アニメーション'][i]}</button>)}<button type="button" disabled={busy||objects.length>=100} onClick={()=>{replace.current=false;file.current?.click();}}>{busy?'画像読込中…':'＋ 画像'}</button></div>
@@ -28,7 +41,9 @@ export function ObjectPanel({objects,selected,onSelect,onChange,onError,onImage}
  {object.kind==='image'&&<><button type="button" onClick={()=>{replace.current=true;file.current?.click();}}>画像を差し替え</button><label>画像の表示<select aria-label="画像の表示" value={object.fit} onChange={e=>change({fit:e.target.value as 'cover'|'contain'})}><option value="contain">全体を表示</option><option value="cover">枠に合わせて切り抜く</option></select></label>{object.fit==='cover'&&<>{(['cropX','cropY'] as const).map((k,i)=><label key={k}>{i?'切り抜き位置・上下':'切り抜き位置・左右'}<input aria-label={i?'切り抜き位置・上下':'切り抜き位置・左右'} type="range" min="0" max="100" value={object[k]} onChange={e=>change({[k]:Number(e.target.value)})}/></label>)}</>}</>}
  {(object.kind==='shape'||object.kind==='motion'||object.kind==='table')&&<label>塗りの色<input aria-label="塗りの色" type="color" value={object.fill} onChange={e=>change({fill:e.target.value})}/></label>}
  {object.kind==='shape'&&<><label>形<select aria-label="図形の種類" value={object.shape} onChange={e=>change({shape:e.target.value as SlideObject['shape']})}><option value="rectangle">四角形</option><option value="ellipse">楕円</option><option value="arrow">矢印</option><option value="line">線</option></select></label><label>線の色<input aria-label="線の色" type="color" value={object.stroke} onChange={e=>change({stroke:e.target.value})}/></label></>}
- {object.kind==='motion'&&<><label>種類<select value={object.motion} onChange={e=>change({motion:e.target.value as SlideObject['motion']})}>{motionPresets.filter(([kind])=>kind!=='none').map(([kind,name])=><option key={kind} value={kind}>{name}</option>)}</select></label><label>周期 (秒)<input type="range" min="2" max="120" value={object.duration} onChange={e=>change({duration:Number(e.target.value)})}/>{object.duration}</label></>}
+ {(object.kind==='motion'&&object.motion==='arrow'&&!object.customSvg)&&<label>矢印の太さ<input type="range" aria-label="矢印の太さ" min="1" max="24" step="1" value={object.strokeWidth??6} onChange={e=>change({strokeWidth:Number(e.target.value)})}/><output>{object.strokeWidth??6}</output></label>}
+ {object.kind==='motion'&&object.customSvg&&<p>自作SVG：色・動き・速度はSVGファイル内で指定します。位置・サイズ・回転は下の項目で調整できます。</p>}
+ {object.kind==='motion'&&!object.customSvg&&<><label>種類<select value={object.motion} onChange={e=>change({motion:e.target.value as SlideObject['motion']})}>{motionPresets.filter(([kind])=>kind!=='none').map(([kind,name])=><option key={kind} value={kind}>{name}</option>)}</select></label><label>周期 (秒)<input type="range" min="2" max="120" value={object.duration} onChange={e=>change({duration:Number(e.target.value)})}/>{object.duration}</label></>}
  {(object.kind==='table'||object.kind==='chart')&&<>
  {object.kind==='chart'&&<label>グラフの種類<select aria-label="グラフの種類" value={object.chartType} onChange={e=>change({chartType:e.target.value as SlideObject['chartType']})}><option value="bar">棒グラフ</option><option value="line">折れ線グラフ</option><option value="pie">円グラフ</option></select></label>}
  <p>1行目は見出し。グラフは2列目以降を数値にします。円グラフは2列目の正数を使用します。</p>

@@ -1,3 +1,4 @@
+import {ExtraMotion,extraMotionPresets} from './extra-motions';
 import type {CSSProperties} from 'react';
 export const layerPresets = [
  ['holo-cards','3D カード','情報を整理するカード'],
@@ -10,6 +11,7 @@ export const layerPresets = [
  ['holo-cloud','3D クラウド','クラウド基盤・データ連携'],
  ['holo-compare','3D 比較','2つの選択肢や改善前後'],
  ['holo-timeline','3D タイムライン','計画・進捗・ロードマップ'],
+ ...extraMotionPresets,
 ] as const;
 function Drawing({kind}:{kind:string}) {
  switch(kind){
@@ -26,5 +28,11 @@ function Drawing({kind}:{kind:string}) {
  }
 }
 export function RichLayers({kind}:{kind:string}) {
- return <div className="rich-layer-scene" aria-hidden="true"><div className="rich-layer-stack">{[2,1,0].map(layer=><div className="rich-layer-card" key={layer} style={{'--layer':layer} as CSSProperties}>{layer===0&&<><div className="rich-layer-dots"><i/><i/><i/></div><svg viewBox="0 0 400 220" className="rich-layer-drawing"><Drawing kind={kind}/></svg><div className="rich-layer-sheen"/></>}</div>)}</div></div>;
+ if(extraMotionPresets.some(([id])=>id===kind))return <div className={`rich-layer-scene dynamic-${kind}`} aria-hidden="true"><div className="kinetic-halo"/><ExtraMotion kind={kind}/></div>;
+ const spatial=['holo-chart','holo-network','holo-grid','holo-cloud'].includes(kind);
+ return <div className={`rich-layer-scene dynamic-${kind}`} aria-hidden="true">
+ <div className="kinetic-halo"/>
+ {spatial ? <div className="spatial-stage">{Array.from({length:kind==='holo-chart'?5:9},(_,i)=><div className="spatial-unit" key={i} style={{'--n':i,'--row':Math.floor(i/3),'--col':i%3,'--bar-height':`${30+i*12}%`} as CSSProperties}>{kind==='holo-chart'?<><i className="bar-front"/><i className="bar-side"/><i className="bar-top"/></>:<><i className="node-core"/><i className="node-ring"/><i className="node-ray"/></>}</div>)}</div> : <div className="rich-layer-stack bare-motif"><svg viewBox="0 0 400 220" className="rich-layer-drawing"><Drawing kind={kind}/></svg></div>}
+
+ </div>;
 }

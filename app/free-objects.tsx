@@ -24,7 +24,8 @@ function ObjectBody({object:o,editing,inspect=false,onText}:{object:SlideObject;
  {o.kind==='shape'&&<svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style={{overflow:'visible'}}><g fillOpacity={o.fillOpacity ?? 1} strokeWidth={o.strokeWidth===undefined?1:o.strokeWidth/Math.max(o.w,o.h)*100}>{o.shape==='ellipse'?<ellipse cx="50" cy="50" rx="48" ry="48" fill={o.fill} stroke={o.stroke}/>:o.shape==='line'?<line x1="0" y1="50" x2="100" y2="50" strokeWidth={o.strokeWidth===undefined?2:o.strokeWidth/o.h*100} stroke={o.stroke}/>:o.shape==='arrow'?<path d="M0 35H65V10L100 50 65 90V65H0Z" fill={o.fill} stroke={o.stroke}/>:<rect x="1" y="1" width="98" height="98" rx="0" fill={o.fill} stroke={o.stroke}/>}</g></svg>}
  {o.kind==='table'&&<table className="object-table" style={{fontSize:o.style.fontSize?`${o.style.fontSize/12}cqw`:'1.4cqw'}}><tbody>{o.cells.map((row,i)=><tr key={i}>{row.map((v,j)=><td key={j} style={i===0?{background:o.fill,fontWeight:700}:undefined}>{v}</td>)}</tr>)}</tbody></table>}
  {o.kind==='chart'&&<ObjectChart object={o}/>}
- {o.kind==='motion'&&<div style={{width:'100%',height:'100%','--art-color':o.fill,'--orbit-duration':`${o.duration}s`} as CSSProperties}><MotionArt kind={o.motion}/></div>}
+ {o.kind==='motion'&&o.customSvg&&<img alt={o.name} src={'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(o.customSvg)} style={{width:'100%',height:'100%',objectFit:'contain'}}/>}
+ {o.kind==='motion'&&!o.customSvg&&<div style={{width:'100%',height:'100%','--art-color':o.fill,'--orbit-duration':`${o.duration}s`} as CSSProperties}><MotionArt kind={o.motion} strokeWidth={o.strokeWidth}/></div>}
  {overflow&&inspect&&<span className="overflow-badge">文字が枠を超えています</span>}
  </div>;
 }

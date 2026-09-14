@@ -247,7 +247,7 @@ export function SlideView({
           data-edit-element="artwork"
           aria-hidden="true"
         >
-          ↗
+          <MotionArt kind="arrow" strokeWidth={slide.arrowWidth??6}/>
         </div>
       )}
       {hasLayoutItems(slide.layout) && (
@@ -888,6 +888,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
       redoDrafts.current = [];
       setHistoryTick((t) => t + 1);
       setError("");
+      setAutosaveError("");
       setWorkspace(next);
       const id = savingDraftId.current;
       if (id) {
@@ -1029,6 +1030,13 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
       e.preventDefault();changeDraft('objects',[...(draft.objects||[]),...copies]);setObjectSelection(copies.map(o=>o.id));setTab('edit');setLayoutEditing(false);return;
     }catch{}
     const file=Array.from(e.clipboardData.files).find(f=>f.type.startsWith('image/'));if(file){e.preventDefault();void insertImage(file);}
+  }
+  function addMotion(kind:string,point?:{x:number;y:number}) {
+    if(locked || (draft.objects?.length||0)>=100)return;
+    if(!motionPresets.some(([id])=>id===kind&&id!=='none'))return;
+    const offset=((draft.objects?.length||0)%6)*24;
+    const obj=objectSchema.parse({...makeObject('motion'),name:motionPresets.find(([id])=>id===kind)?.[1]||'アニメーション',motion:kind,w:480,h:300,x:point?Math.max(0,Math.min(1120,point.x-240)):560+offset,y:point?Math.max(0,Math.min(600,point.y-150)):300+offset,fill:'#2454ef',duration:16});
+    changeDraft('objects',[...(draft.objects||[]),obj]);setObjectSelection([obj.id]);setTab('edit');setLayoutEditing(false);
   }
   function addArtwork() {
     recordDraft("artwork-add", true);
@@ -1673,7 +1681,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
             onResize={(w) => resizePanel("left", w)}
           />
         </aside>
-        <main className={`center ${showEditGuides ? "" : "edit-guides-hidden"}`} onDragOver={e=>{if(e.dataTransfer.types.includes('Files'))e.preventDefault();}} onDrop={e=>{const file=Array.from(e.dataTransfer.files).find(f=>f.type.startsWith('image/'));if(file){e.preventDefault();void insertImage(file);}}}>
+        <main className={`center ${showEditGuides ? "" : "edit-guides-hidden"}`} onDragOver={e=>{if(e.dataTransfer.types.includes('Files')||e.dataTransfer.types.includes('application/x-agent-slides-motion')){e.preventDefault();e.dataTransfer.dropEffect='copy';}}} onDrop={e=>{const kind=e.dataTransfer.getData('application/x-agent-slides-motion');if(kind){e.preventDefault();const box=e.currentTarget.querySelector('.slide')?.getBoundingClientRect();if(box&&e.clientX>=box.left&&e.clientX<=box.right&&e.clientY>=box.top&&e.clientY<=box.bottom)addMotion(kind,{x:(e.clientX-box.left)/box.width*1600,y:(e.clientY-box.top)/box.height*900});return;}const file=Array.from(e.dataTransfer.files).find(f=>f.type.startsWith('image/'));if(file){e.preventDefault();void insertImage(file);}}}>
           <div className="canvas-toolbar">
             <div>
               {slidesCollapsed&&<button aria-label="スライド一覧を開く" title="スライド一覧を開く" aria-expanded={false} aria-controls="slides-sidebar" onClick={()=>setSlidesCollapsed(false)}><PanelLeft size={17}/></button>}
@@ -2242,15 +2250,16 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
               </section>
               <section className="artwork-actions" id="motion-library">
                 <h3>モーションライブラリ</h3>
-                <p className="motion-help">選ぶ → 配置モードでドラッグ → 四隅でサイズ調整</p>
+                <p className="motion-help">クリックで追加、またはスライドへドラッグ。色・サイズは各要素で変更できます。</p>
+                {draft.artworkKind==='arrow'&&<label>既存の装飾矢印の太さ<input type="range" aria-label="既存の装飾矢印の太さ" min="1" max="24" value={draft.arrowWidth??6} onChange={e=>changeDraft('arrowWidth',Number(e.target.value))}/></label>}
                 <div className="motion-preset-grid">
-                  {motionPresets.map(([kind,name,description]) => <button type="button" key={kind} title={description} aria-label={name} aria-pressed={draft.artworkKind === kind} onClick={()=>{changeDraft("artworkKind",kind);if(kind.startsWith("holo-"))changeDraft("placements",{...draft.placements,artwork:{...(draft.placements?.artwork||defaultPlacement),rotation:0}});setSelectedElement("artwork");setLayoutEditing(true);}}>
-                    <div className="motion-mini">{kind === "orbit" ? <span>◎</span> : kind === "arrow" ? <span>↗</span> : kind === "none" ? <span>—</span> : <MotionArt kind={kind}/>}</div>
+                  {motionPresets.map(([kind,name,description]) => <button type="button" key={kind} title={description} aria-label={name} disabled={locked || (draft.objects?.length||0)>=100} draggable={kind!=="none"&&!locked} onDragStart={e=>{e.dataTransfer.setData("application/x-agent-slides-motion",kind);e.dataTransfer.effectAllowed="copy";}} onClick={()=>{if(kind==="none")changeDraft("artworkKind","none");else addMotion(kind);}}>
+                    <div className="motion-mini">{kind === "orbit" ? <span>◎</span> : kind === "arrow" ? <span>→</span> : kind === "none" ? <span>—</span> : <MotionArt kind={kind}/>}</div>
                     <strong>{name}</strong>
                   </button>)}
                 </div>
-                <div className="motion-playback"><button type="button" onClick={()=>setPlaying(p=>!p)}>{playing ? "動きを一時停止" : "動きを再生"}</button><label>周期 <input aria-label="モーションの周期" type="range" min="2" max="60" value={draft.animationDuration || 38} onChange={e=>changeDraft("animationDuration",Number(e.target.value))}/><output>{draft.animationDuration || 38}秒</output></label></div>
-                <label className="motion-color">アニメーションの色 <input type="color" aria-label="アニメーションの色" value={draft.artworkColor || "#2454ef"} onChange={e=>changeDraft("artworkColor",e.target.value)}/></label>
+                <div className="motion-playback"><button type="button" onClick={()=>setPlaying(p=>!p)}>{playing ? "動きを一時停止" : "動きを再生"}</button><label>選択要素の周期 <input aria-label="モーションの周期" type="range" min="2" max="60" disabled={!draft.objects?.some(o=>o.id===objectSelection[0]&&o.kind==="motion")} value={draft.objects?.find(o=>o.id===objectSelection[0])?.duration || 16} onChange={e=>changeDraft("objects",(draft.objects||[]).map(o=>o.id===objectSelection[0]&&!o.locked?{...o,duration:Number(e.target.value)}:o))}/><output>{draft.objects?.find(o=>o.id===objectSelection[0])?.duration || 16}秒</output></label></div>
+                {draft.objects?.find(o=>o.id===objectSelection[0]&&o.kind==='motion') ? <label className="motion-color">選択したモーションの色<input type="color" aria-label="選択したモーションの色" value={draft.objects.find(o=>o.id===objectSelection[0])!.fill} onChange={e=>changeDraft('objects',draft.objects!.map(o=>o.id===objectSelection[0]&&!o.locked?{...o,fill:e.target.value}:o))}/></label> : <p>色を変えるには、配置したモーションをクリックして選択してください。</p>}
                 <div>
                   <button type="button" onClick={addArtwork}>
                     円形アニメーションを追加
