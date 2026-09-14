@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+const dir='vendor/pptxgenjs/';
+const manifest=JSON.parse(readFileSync(dir+'package.json','utf8'));
+assert.equal(manifest.dependencies['image-size'],undefined);
+const hashes=JSON.parse(readFileSync(dir+'upstream-sha256.json','utf8'));
+for(const [file,hash] of Object.entries(hashes))assert.equal(createHash('sha256').update(readFileSync(dir+file)).digest('hex'),hash,file);
+for(const file of ['dist/pptxgen.es.js','dist/pptxgen.cjs.js'])assert(!/\b(?:from\s*|require\s*\(\s*|import\s*\(\s*)["']image-size/.test(readFileSync(dir+file,'utf8')));
+console.log('PptxGenJS runtime provenance and removed dependency PASS');

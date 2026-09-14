@@ -1,0 +1,70 @@
+{
+  "name": "@agent-slides/pptxgenjs",
+  "version": "4.0.1-studio.1",
+  "author": {
+    "name": "Brent Ely",
+    "url": "https://github.com/gitbrent/"
+  },
+  "description": "Auditable local PptxGenJS 4.0.1 distribution with unused image-size dependency removed",
+  "homepage": "https://gitbrent.github.io/PptxGenJS/",
+  "license": "MIT",
+  "exports": {
+    "types": "./types/index.d.ts",
+    "import": "./dist/pptxgen.es.js",
+    "require": "./dist/pptxgen.cjs.js"
+  },
+  "main": "dist/pptxgen.cjs.js",
+  "module": "dist/pptxgen.es.js",
+  "files": [
+    "dist",
+    "types",
+    "LICENSE",
+    "UPSTREAM.md",
+    "upstream-sha256.json"
+  ],
+  "types": "types",
+  "browser": {
+    "express": false,
+    "fs": false,
+    "https": false,
+    "image-size": false,
+    "node:fs": false,
+    "node:https": false,
+    "os": false,
+    "path": false
+  },
+  "dependencies": {
+    "@types/node": "^22.8.1",
+    "https": "^1.0.0",
+    "jszip": "^3.10.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gitbrent/PptxGenJS.git"
+  },
+  "keywords": [
+    "es6-powerpoint",
+    "html-to-powerpoint",
+    "javascript-create-powerpoint",
+    "javascript-create-pptx",
+    "javascript-generate-pptx",
+    "javascript-powerpoint",
+    "javascript-powerpoint-charts",
+    "javascript-pptx",
+    "js-create-powerpoint",
+    "js-create-pptx",
+    "js-generate-powerpoint",
+    "js-powerpoint",
+    "js-powerpoint-library",
+    "js-powerpoint-pptx",
+    "node-powerpoint",
+    "officejs-alternative",
+    "react-powerpoint",
+    "slide-generator",
+    "typescript-powerpoint"
+  ],
+  "bugs": {
+    "url": "https://github.com/gitbrent/PptxGenJS/issues"
+  },
+  "private": true
+}

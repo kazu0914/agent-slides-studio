@@ -15,22 +15,16 @@ do not include exploit details or sensitive data until that channel is establish
 
 Only the current development branch is maintained. There is no fixed security response SLA.
 
-## Known dependency advisory (2026-09-14)
+## Dependency remediation (2026-09-14)
 
-PptxGenJS 4.0.1 transitively depends on image-size, which npm audit reports under
-GHSA-w3rx-r6r6-pgpr and GHSA-5p2g-fcmc-qvqq (ICNS/JXL/HEIF parser denial of service).
-The current registry versions have no non-breaking upstream fix. Do not use `npm audit fix --force`
-without review: it proposes a major downgrade of PptxGenJS.
-This app only supplies browser-generated PNG data to PptxGenJS, including backgrounds;
-it does not pass raw uploaded images or arbitrary image paths to that parser.
-The advisory remains in dependency audit results and must be revisited before release.
-Vite and esbuild were updated to 8.3.0 and 0.28.2 respectively during release preparation.
-
-Release candidate review (2026-09-14): the minimal public dependency tree still reports two high-severity
-package entries (`image-size` and its parent `pptxgenjs`). All `addImage` call sites in the exporter
-use PNG produced by the browser; the PPTX importer accepts PNG/JPEG/WebP bytes and does not call
-`image-size`. This limits reachability of the affected ICNS/JXL/HEIF parsers, but does not remove
-the installed vulnerable dependency. This remains a disclosed limitation of the local preview release.
+The public package uses a local PptxGenJS 4.0.1 distribution under vendor/pptxgenjs.
+Its runtime and type files are unchanged, with hashes and upstream license retained.
+The unused image-size dependency was removed from its package manifest. Neither
+runtime entry point imports it. This removes the vulnerable ICNS/JXL/HEIF parsers
+(GHSA-w3rx-r6r6-pgpr and GHSA-5p2g-fcmc-qvqq) from the public dependency tree;
+we did not suppress or ignore the audit findings. See vendor/pptxgenjs/UPSTREAM.md.
+A clean public install reports zero known npm audit vulnerabilities on this date.
+This is not a guarantee against unknown vulnerabilities or future advisories.
 
 ## Final review hardening (2026-09-14)
 
@@ -40,4 +34,4 @@ HTTP JSON bodies are byte-limited and decoded after joining UTF-8 chunks.
 PPTX group nesting is limited to 32 levels, in addition to ZIP/XML/slide limits.
 Regression checks cover these boundaries plus save conflicts, backup restoration
 and PDF/PPTX export. This review is not an independent penetration test and does
-not guarantee the absence of vulnerabilities. The dependency advisories above remain.
+not guarantee the absence of vulnerabilities.
