@@ -1,7 +1,7 @@
 "use client";
 import CardHandles from "./card-handles";
 import BrandLogo from "./brand-logo";
-import {useBackgrounds} from "./use-backgrounds";
+import {useBackgrounds,backgroundLabels} from "./use-backgrounds";
 import {FreeObjects,textCss} from "./free-objects";
 import {ObjectPanel,TextStyleControls,uploadImage} from "./object-panel";
 import {makeObject,objectSchema,type SlideObject} from "@/lib/objects";
@@ -2341,13 +2341,13 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
               </div>
               <section className="background-templates">
                 <h3>背景テンプレート</h3>
-                <p>選ぶと現在のスライドに反映されます。「保存する」で確定します。</p>
+                <p>選ぶと現在のスライドに反映され、自動保存されます。</p>
                 {!backgrounds.length&&<p>同梱の背景画像はありません。背景色や画像要素を利用できます。</p>}
                 <div className="background-grid">
-                  {backgrounds.map((id, i) => (
-                    <button type="button" key={id} aria-label={`背景テンプレート ${i + 1}`} aria-pressed={draft.backgroundTemplate === id} onClick={() => changeDraft("backgroundTemplate", id)}>
+                  {backgrounds.map((id) => (
+                    <button type="button" key={id} aria-label={`背景テンプレート ${backgroundLabels[id] || `背景 ${id.replace("bg_", "")}`}`} aria-pressed={draft.backgroundTemplate === id} onClick={() => changeDraft("backgroundTemplate", id)}>
                       <img src={`/backgrounds/${id}.png`} alt="" loading="lazy" />
-                      <span>背景 {i + 1}{draft.backgroundTemplate === id ? " · 選択中" : ""}</span>
+                      <span>{backgroundLabels[id] || `背景 ${id.replace("bg_", "")}`}{draft.backgroundTemplate === id ? " · 選択中" : ""}</span>
                     </button>
                   ))}
                 </div>

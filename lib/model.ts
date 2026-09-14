@@ -17,7 +17,7 @@ export const slideSchema = z.object({
   theme: z.enum(["blue", "white", "dark"]),
   imported: z.boolean().optional(),
   backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-  backgroundTemplate: z.enum(["none", "bg_1", "bg_2", "bg_3", "bg_4", "bg_5", "bg_6"]).optional(),
+  backgroundTemplate: z.enum(["none", "bg_1", "bg_2", "bg_3", "bg_4", "bg_5", "bg_6", "public-blue", "public-green", "public-orange"]).optional(),
   animation: z.enum(["orbit", "reveal", "none"]),
   artworkKind: z.enum(["holo-cards",'holo-database','holo-server','holo-target','holo-funnel','holo-pyramid','holo-solar','holo-gears','holo-platform','holo-honeycomb','holo-equalizer','holo-prism','holo-chart','holo-network','holo-flow','holo-grid','holo-document','holo-shield','holo-cloud','holo-compare','holo-timeline', "orbit", "arrow", "none", "cube", "globe", "rings", "helix", "crystal", "wave", "particles", "pulse", "bars"]).optional(),
   revealSteps:z.object({title:z.number().int().min(0).max(100).optional(),body:z.number().int().min(0).max(100).optional(),eyebrow:z.number().int().min(0).max(100).optional(),items:z.number().int().min(0).max(100).optional(),artwork:z.number().int().min(0).max(100).optional()}).optional(),
