@@ -11,3 +11,6 @@ assert.throws(()=>importPptx(pack({...source,'ppt/presentation.xml':'<!DOCTYPE x
 assert.throws(()=>importPptx(pack({...source,'ppt/presentation.xml':presentation.replace('16000000','0')}),'x.pptx',()=>''),/サイズ/);
 assert.throws(()=>importPptx(new Uint8Array(0),'x.pptx',()=>''),/50MB/);
 console.log('PPTX import: order, editable text, geometry, entity rejection and invalid input passed');
+
+const nested='<p:grpSp>'.repeat(34)+'</p:grpSp>'.repeat(34);
+assert.throws(()=>importPptx(pack({...source,'ppt/slides/slide1.xml':slide('x').replace('<p:spTree>','<p:spTree>'+nested)}),'nested.pptx',()=>''),/階層/);

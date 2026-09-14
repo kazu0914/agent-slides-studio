@@ -29,11 +29,12 @@ export function importPptx(bytes:Uint8Array,name:string,saveImage:(data:string)=
   const path=refs.find(r=>r.id===attr(id,'r:id'))?.path;if(!path)throw Error('スライドの参照が不正です');const root=xml(path),cs=child(root,'cSld'),tree=child(cs,'spTree'),relationships=rels(path);const objects:SlideObject[]=[];
   const warn=(message:string)=>warnings.add(`${index+1}枚目: ${message}`);
   const add=(value:Record<string,unknown>)=>{if(objects.length>=100)throw Error(`${index+1}枚目の要素数が100を超えています`);objects.push(objectSchema.parse({id:randomUUID(),...value}));};
-  const walk=(parent:Element|undefined,tx=ox,ty=oy,sx=scale,sy=scale,groupId?:string)=>{
+  const walk=(parent:Element|undefined,tx=ox,ty=oy,sx=scale,sy=scale,groupId?:string,depth=0)=>{
+   if(depth>32)throw Error('PPTXのグループ階層が深すぎます');
    for(const node of children(parent)){
     const kind=node.localName||'';if(['nvGrpSpPr','grpSpPr'].includes(kind))continue;
     const sp=child(node,'spPr'),xf=child(sp,'xfrm')||child(node,'xfrm');
-    if(kind==='grpSp'){const gx=child(child(node,'grpSpPr'),'xfrm'),off=child(gx,'off'),ext=child(gx,'ext'),co=child(gx,'chOff'),ce=child(gx,'chExt');const nsx=sx*num(ext,'cx',1)/num(ce,'cx',1),nsy=sy*num(ext,'cy',1)/num(ce,'cy',1);if(num(gx,'rot'))warn('グループの回転は再現されません。');walk(node,tx+num(off,'x')*sx-num(co,'x')*nsx,ty+num(off,'y')*sy-num(co,'y')*nsy,nsx,nsy,randomUUID());continue;}
+    if(kind==='grpSp'){const gx=child(child(node,'grpSpPr'),'xfrm'),off=child(gx,'off'),ext=child(gx,'ext'),co=child(gx,'chOff'),ce=child(gx,'chExt');const nsx=sx*num(ext,'cx',1)/num(ce,'cx',1),nsy=sy*num(ext,'cy',1)/num(ce,'cy',1);if(num(gx,'rot'))warn('グループの回転は再現されません。');walk(node,tx+num(off,'x')*sx-num(co,'x')*nsx,ty+num(off,'y')*sy-num(co,'y')*nsy,nsx,nsy,randomUUID(),depth+1);continue;}
     if(!['sp','pic','cxnSp','graphicFrame'].includes(kind)){warn(`${kind}は未対応のため省略しました。`);continue;}
     if(!xf){warn('マスター由来の位置情報を持つ要素を省略しました。');continue;}
     const off=child(xf,'off'),ext=child(xf,'ext');const box={x:tx+num(off,'x')*sx,y:ty+num(off,'y')*sy,w:Math.max(1,num(ext,'cx')*sx),h:Math.max(1,num(ext,'cy')*sy),rotation:num(xf,'rot')/60000,groupId};

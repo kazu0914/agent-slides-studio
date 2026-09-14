@@ -85,7 +85,14 @@ createServer(async (req, res) => {
     });
     res.end(JSON.stringify(data));
   };
+  // 埋め込み・外部スクリプト・別サイトからのアクセスを制限する。
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
   try {
+    if (req.headers['sec-fetch-site'] === 'cross-site')
+      throw new AppError("別サイトからの操作は受け付けません。", 403);
     if (
       req.headers.host !== `127.0.0.1:${port}` &&
       req.headers.host !== `localhost:${port}`
@@ -109,12 +116,16 @@ createServer(async (req, res) => {
       throw new AppError("このデッキは削除されています。", 404);
     let body: unknown;
     if (req.method === "POST") {
-      let text = "";
+      const chunks: Buffer[] = [];
+      let size = 0;
+      const limit = url.pathname === "/api/pptx/import" ? 71000000 : url.pathname === "/api/backup/import" ? 150000000 : url.pathname === "/api/assets" ? 15000000 : 10000000;
       for await (const chunk of req) {
-        text += chunk;
-        if (Buffer.byteLength(text) > (url.pathname==="/api/pptx/import"?71000000:url.pathname==="/api/backup/import"?150000000:url.pathname==="/api/assets"?15000000:10000000))
-          throw new AppError("データが大きすぎます。", 413);
+        size += chunk.length;
+        if (size > limit) throw new AppError("データが大きすぎます。", 413);
+        chunks.push(Buffer.from(chunk));
       }
+      // UTF-8の文字が複数チャンクにまたがっても、結合してから復号する。
+      const text = Buffer.concat(chunks, size).toString("utf8");
       try {
         body = JSON.parse(text);
       } catch {

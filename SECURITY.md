@@ -31,3 +31,13 @@ package entries (`image-size` and its parent `pptxgenjs`). All `addImage` call s
 use PNG produced by the browser; the PPTX importer accepts PNG/JPEG/WebP bytes and does not call
 `image-size`. This limits reachability of the affected ICNS/JXL/HEIF parsers, but does not remove
 the installed vulnerable dependency. This remains a disclosed limitation of the local preview release.
+
+## Final review hardening (2026-09-14)
+
+The server rejects cross-site Fetch Metadata requests, checks Host and Origin, and
+sets a Content Security Policy that denies framing, plugins and external scripts.
+HTTP JSON bodies are byte-limited and decoded after joining UTF-8 chunks.
+PPTX group nesting is limited to 32 levels, in addition to ZIP/XML/slide limits.
+Regression checks cover these boundaries plus save conflicts, backup restoration
+and PDF/PPTX export. This review is not an independent penetration test and does
+not guarantee the absence of vulnerabilities. The dependency advisories above remain.
