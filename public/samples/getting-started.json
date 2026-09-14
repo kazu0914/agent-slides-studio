@@ -1,0 +1,57 @@
+{
+  "title": "はじめてのAgent Slides Studio",
+  "slides": [
+    {
+      "id": "sample-1",
+      "title": "まずは、文字を編集",
+      "body": "「編集」タブを開き、タイトルや本文をクリックして書き換えてください。",
+      "eyebrow": "GETTING STARTED",
+      "layout": "statement",
+      "theme": "white",
+      "animation": "none",
+      "artworkKind": "none",
+      "notes": "このサンプルは自由に編集できます。",
+      "items": [],
+      "strokes": []
+    },
+    {
+      "id": "sample-2",
+      "title": "変更を確かめて保存",
+      "body": "編集を保存すると、ログで変更前後と理由を確認できます。",
+      "eyebrow": "GETTING STARTED",
+      "layout": "flow",
+      "theme": "white",
+      "animation": "none",
+      "artworkKind": "none",
+      "notes": "このサンプルは自由に編集できます。",
+      "items": [
+        {
+          "title": "編集",
+          "body": "文字や図形を変更する"
+        },
+        {
+          "title": "保存",
+          "body": "内容を確認して保存する"
+        },
+        {
+          "title": "履歴",
+          "body": "変更ログを開く"
+        }
+      ],
+      "strokes": []
+    },
+    {
+      "id": "sample-3",
+      "title": "プレゼンしてみよう",
+      "body": "プレゼンテーションを開き、矢印キーで進みます。ペンで書いた内容は終了時に消えます。",
+      "eyebrow": "GETTING STARTED",
+      "layout": "statement",
+      "theme": "white",
+      "animation": "none",
+      "artworkKind": "none",
+      "notes": "このサンプルは自由に編集できます。",
+      "items": [],
+      "strokes": []
+    }
+  ]
+}

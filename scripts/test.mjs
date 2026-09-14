@@ -1,0 +1,3 @@
+import {build} from 'esbuild';import {mkdtemp,rm,readdir} from 'node:fs/promises';import {tmpdir} from 'node:os';import {join} from 'node:path';import {spawnSync} from 'node:child_process';
+const dir=await mkdtemp(join(tmpdir(),'agent-slides-tests-'));
+try{for(const name of (await readdir('tests')).filter(n=>n.endsWith('.test.ts'))){const outfile=join(dir,name+'.mjs');await build({entryPoints:['tests/'+name],bundle:true,platform:'node',format:'esm',outfile});const r=spawnSync(process.execPath,[outfile],{stdio:'inherit'});if(r.status!==0)process.exitCode=1;}}finally{await rm(dir,{recursive:true,force:true});}

@@ -1,0 +1,9 @@
+name: Feature request / 機能提案
+description: Explain the workflow you want to improve.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and desired outcome / 困っていることと実現したいこと
+    validations:
+      required: true

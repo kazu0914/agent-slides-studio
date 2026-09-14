@@ -1,0 +1,25 @@
+name: Bug report / 不具合報告
+description: Report a reproducible issue without private data.
+body:
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps / 再現手順
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior / 期待する動作と実際の動作
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS, browser, Node.js and Codex versions
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized logs or screenshots / 個人情報を除いたログ・画像

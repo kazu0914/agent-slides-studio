@@ -1,0 +1,10 @@
+import { createRoot } from "react-dom/client";
+import Studio from "../app/studio-client";
+import PdfDeck from "../app/pdf-deck";
+import Presenter from "../app/presenter";
+import Library from "../app/library-client";
+import DeveloperFooter from "../app/developer-footer";
+const exportId = location.pathname.match(/^\/export\/([^/]+)$/)?.[1];
+const id = location.pathname.match(/^\/deck\/([^/]+)$/)?.[1];
+const page=location.pathname==="/presenter" ? <Presenter/> : exportId ? <PdfDeck deckId={decodeURIComponent(exportId)}/> : id ? <Studio deckId={decodeURIComponent(id)}/> : <Library/>;
+createRoot(document.getElementById("root")!).render(exportId?page:<div className="app-with-footer">{page}<DeveloperFooter/></div>);

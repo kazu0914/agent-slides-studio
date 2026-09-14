@@ -1,0 +1,33 @@
+:root {
+  --color-paper: oklch(98% 0.004 255);
+  --color-white: oklch(100% 0 0);
+  --color-ink: oklch(25% 0.025 260);
+  --color-muted: oklch(53% 0.018 258);
+  --color-line: oklch(91% 0.01 255);
+  --color-blue: oklch(51% 0.235 265);
+  --color-blue-soft: oklch(96% 0.025 265);
+  --color-stage: oklch(95.8% 0.009 260);
+  --color-green: oklch(52% 0.12 165);
+  --color-pink: oklch(70% 0.2 350);
+  --color-yellow: oklch(89% 0.16 95);
+  --color-dark: oklch(24% 0.05 266);
+  --color-on-blue: oklch(90% 0.045 265);
+  --color-orbit: oklch(79% 0.11 265 / 0.65);
+  --color-ghost: oklch(100% 0 0 / 0.15);
+  --color-shadow: oklch(25% 0.04 260 / 0.08);
+  --color-error: oklch(51% 0.2 25);
+  --font-display: "Avenir Next", "Hiragino Sans", sans-serif;
+  --font-body: "Hiragino Sans", "Yu Gothic", sans-serif;
+  --font-mono: ui-monospace, monospace;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --text-sm: 12px;
+  --text-md: 14px;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 150ms;
+  --radius-sm: 6px;
+}

@@ -1,0 +1,48 @@
+{
+  "name": "agent-slides-studio",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "npm run build && npm start",
+    "build": "vite build --config local/vite.config.ts && esbuild local/server.ts --bundle --platform=node --format=esm --packages=external --outfile=dist-local/server.mjs",
+    "start": "node dist-local/server.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.local.json",
+    "test": "node scripts/test.mjs",
+    "check:release": "node scripts/check-release.mjs"
+  },
+  "dependencies": {
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "lucide-react": "^1.31.0",
+    "zod": "^3.25.76",
+    "playwright": "^1.63.0",
+    "pdf-lib": "^1.17.1",
+    "pptxgenjs": "^4.0.1",
+    "fflate": "^0.8.3",
+    "@xmldom/xmldom": "^0.9.12"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.19",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@cloudflare/workers-types": "4.20260515.1",
+    "@vitejs/plugin-react": "6.0.2",
+    "vite": "8.3.0",
+    "typescript": "5.9.3",
+    "esbuild": "0.28.2"
+  },
+  "type": "module",
+  "description": "Local-first agent-native slide editor with visual AI review and decision history",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kazu0914/agent-slides-studio.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kazu0914/agent-slides-studio/issues"
+  },
+  "homepage": "https://github.com/kazu0914/agent-slides-studio#readme"
+}

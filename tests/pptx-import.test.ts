@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import {zipSync,strToU8} from 'fflate';
+import {importPptx} from '../local/pptx-import';
+const presentation='<p:presentation xmlns:p="p" xmlns:r="r"><p:sldSz cx="16000000" cy="9000000"/><p:sldIdLst><p:sldId r:id="second"/><p:sldId r:id="first"/></p:sldIdLst></p:presentation>';
+const slide=(word:string)=>`<p:sld xmlns:p="p" xmlns:a="a"><p:cSld><p:spTree><p:sp><p:spPr><a:xfrm><a:off x="1000000" y="1000000"/><a:ext cx="8000000" cy="1000000"/></a:xfrm><a:noFill/></p:spPr><p:txBody><a:bodyPr lIns="0" rIns="0" tIns="0" bIns="0"/><a:p><a:r><a:rPr sz="2400"/><a:t>${word}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`;
+const source={'ppt/presentation.xml':presentation,'ppt/_rels/presentation.xml.rels':'<Relationships><Relationship Id="first" Target="slides/slide1.xml"/><Relationship Id="second" Target="/ppt/slides/slide2.xml"/></Relationships>','ppt/slides/slide1.xml':slide('First'),'ppt/slides/slide2.xml':slide('Second &amp; editable')};
+const pack=(files:Record<string,string>)=>zipSync(Object.fromEntries(Object.entries(files).map(([k,v])=>[k,strToU8(v)])));
+const result=importPptx(pack(source),'Example.pptx',()=>{throw Error('画像はありません');});
+assert.equal(result.deck.slides.length,2);assert.equal(result.deck.slides[0].objects?.[0].text,'Second & editable');assert.equal(result.deck.slides[0].objects?.[0].x,100);assert.equal(result.deck.slides[0].objects?.[0].w,800);assert.equal(result.deck.slides[0].imported,true);assert.equal(result.deck.title,'Example');
+assert.throws(()=>importPptx(pack({...source,'ppt/presentation.xml':'<!DOCTYPE x [<!ENTITY x "x">]>'+presentation}),'x.pptx',()=>''),/XML宣言/);
+assert.throws(()=>importPptx(pack({...source,'ppt/presentation.xml':presentation.replace('16000000','0')}),'x.pptx',()=>''),/サイズ/);
+assert.throws(()=>importPptx(new Uint8Array(0),'x.pptx',()=>''),/50MB/);
+console.log('PPTX import: order, editable text, geometry, entity rejection and invalid input passed');
