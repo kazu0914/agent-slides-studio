@@ -22,6 +22,14 @@
 - プレゼン中の一時的なマーカー、ズーム、クリック表示、別ウィンドウの発表者画面
 - PDFと編集可能なPPTXへの出力（動く装飾は静止画像）
 
+### 編集画面の操作デモ
+
+![スライド編集画面での操作の様子](docs/media/editing-demo.gif)
+
+### 図形や背景を変更する
+
+![図形の追加と背景テンプレートの切り替え](docs/media/background-demo.gif)
+
 ## はじめに
 
 [5分で試すガイド](docs/GETTING_STARTED.md)と[練習用サンプル](public/samples/getting-started.json)を用意しています。
