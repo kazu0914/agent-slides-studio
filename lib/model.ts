@@ -19,7 +19,7 @@ export const slideSchema = z.object({
   backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   backgroundTemplate: z.enum(["none", "bg_1", "bg_2", "bg_3", "bg_4", "bg_5", "bg_6"]).optional(),
   animation: z.enum(["orbit", "reveal", "none"]),
-  artworkKind: z.enum(["orbit", "arrow", "none", "cube", "globe", "rings", "helix", "crystal", "wave", "particles", "pulse", "bars"]).optional(),
+  artworkKind: z.enum(["holo-cards",'holo-chart','holo-network','holo-flow','holo-grid','holo-document','holo-shield','holo-cloud','holo-compare','holo-timeline', "orbit", "arrow", "none", "cube", "globe", "rings", "helix", "crystal", "wave", "particles", "pulse", "bars"]).optional(),
   revealSteps:z.object({title:z.number().int().min(0).max(100).optional(),body:z.number().int().min(0).max(100).optional(),eyebrow:z.number().int().min(0).max(100).optional(),items:z.number().int().min(0).max(100).optional(),artwork:z.number().int().min(0).max(100).optional()}).optional(),
   notes: z.string().max(4000),
   objects: z.array(objectSchema).max(100).optional(),

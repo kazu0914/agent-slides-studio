@@ -508,6 +508,8 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
   const savingDraftId = useRef<string | null>(null);
   const pendingBase = useRef<Deck | null>(null);
   const [draftError, setDraftError] = useState("");
+  const [autosaveError,setAutosaveError]=useState("");
+  const [presentAfterSave,setPresentAfterSave]=useState(false);
   const [prompt, setPrompt] = useState("");
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [aiScope,setAiScope]=useState<Scope['mode']>('deck');
@@ -1107,10 +1109,10 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
       .then(() => {
         setDrafts(d=>{const rest={...d};delete rest[targetId];return rest;});
         delete draftBases.current[targetId];
-        setDraftError("");
+        setDraftError("");setAutosaveError("");
         savingDraftId.current = null;
       })
-      .catch(() => {});
+      .catch(e => {setAutosaveError((e as Error).message);setPresentAfterSave(false);});
   }
   const editingGesture=useRef(false);
   useEffect(()=>{
@@ -1119,10 +1121,10 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
     return()=>{window.removeEventListener('pointerdown',begin);window.removeEventListener('pointerup',end);window.removeEventListener('pointercancel',end);window.removeEventListener('blur',end);};
   },[]);
   useEffect(()=>{
-    if(locked||draftError||error||present||!Object.keys(drafts).length)return;
+    if(locked||autosaveError||draftError.startsWith("同じ箇所")||present||!Object.keys(drafts).length)return;
     const timer=setInterval(()=>{if(!editingGesture.current)applyDraft(Object.keys(drafts)[0]);},1000);
     return()=>clearInterval(timer);
-  },[drafts,locked,draftError,error,present]);
+  },[drafts,locked,draftError,autosaveError,present]);
   function deleteSelectedSlide() {
     if (locked || work.deck.slides.length <= 1) return;
     const next = structuredClone(work.deck);
@@ -1393,15 +1395,15 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
   function openPresenter(){presenterWindow.current=window.open('/presenter?session='+presenterToken.current,'presenter-'+presenterToken.current,'popup,width=1280,height=900');if(!presenterWindow.current)setError('発表者画面を開けませんでした。ポップアップを許可してください。');}
   useEffect(()=>{const state={deck:work.deck,selected,step:revealStep,playing,present,started};presenterState.current=state;presenterChannel.current?.postMessage({type:'state',state});},[work.deck,selected,revealStep,playing,present,started]);
   presenterActions.current=type=>{if(type==='resetTimer'){setStarted(Date.now());return;}if(!present)return;if(type==='next')advancePresentation();if(type==='previous')backPresentation();if(type==='pause')setPlaying(p=>!p);if(type==='end')exitPresent();};
+  useEffect(()=>{
+    if(presentAfterSave&&!Object.keys(drafts).length&&!locked&&!autosaveError)void startPresent();
+  },[presentAfterSave,drafts,locked,autosaveError]);
   async function startPresent() {
-    if (Object.keys(drafts).length) {
-      setDraftError(
-        "プレゼンを始める前に、未保存の変更を保存または取り消してください。",
-      );
-      setSelected(work.deck.slides.findIndex((s) => drafts[s.id]));
-      setTab("edit");
+    if (Object.keys(drafts).length || saving || pending.current) {
+      if(!autosaveError && !draftError.startsWith("同じ箇所")){setDraftError("");setPresentAfterSave(true);}
       return;
     }
+    setPresentAfterSave(false);
     setSessionInk({});
     setControlsVisible(true);
     setStarted(Date.now());setRevealStep(0);setPresent(true);
@@ -1901,7 +1903,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
               </div>
             </div>
           </div>
-          {drafts[slide.id] && <div className="autosave-notice" role="status">{draftError || error ? "自動保存できませんでした。変更内容はこのブラウザに保持されています。" : saving ? "保存中…" : "自動保存待ち…"}{draftError && <p role="alert">{draftError}</p>}</div>}
+          {drafts[slide.id] && <div className="autosave-notice" role="status">{autosaveError ? "自動保存できませんでした。変更内容はこのブラウザに保持されています。" : presentAfterSave ? "保存完了後にプレゼンを開始します…" : saving ? "保存中…" : "自動保存待ち…"}{autosaveError && <><p role="alert">{autosaveError}</p><button onClick={()=>{setAutosaveError("");if(pending.current)void retry();}}>保存を再試行</button></>}{draftError && <p role="alert">{draftError}</p>}</div>}
           <section className={`notes ${notesOpen ? "" : "notes-collapsed"}`}>
             <div>
               <button
@@ -2242,7 +2244,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                 <h3>モーションライブラリ</h3>
                 <p className="motion-help">選ぶ → 配置モードでドラッグ → 四隅でサイズ調整</p>
                 <div className="motion-preset-grid">
-                  {motionPresets.map(([kind,name,description]) => <button type="button" key={kind} title={description} aria-label={name} aria-pressed={draft.artworkKind === kind} onClick={()=>{changeDraft("artworkKind",kind);setSelectedElement("artwork");setLayoutEditing(true);}}>
+                  {motionPresets.map(([kind,name,description]) => <button type="button" key={kind} title={description} aria-label={name} aria-pressed={draft.artworkKind === kind} onClick={()=>{changeDraft("artworkKind",kind);if(kind.startsWith("holo-"))changeDraft("placements",{...draft.placements,artwork:{...(draft.placements?.artwork||defaultPlacement),rotation:0}});setSelectedElement("artwork");setLayoutEditing(true);}}>
                     <div className="motion-mini">{kind === "orbit" ? <span>◎</span> : kind === "arrow" ? <span>↗</span> : kind === "none" ? <span>—</span> : <MotionArt kind={kind}/>}</div>
                     <strong>{name}</strong>
                   </button>)}
