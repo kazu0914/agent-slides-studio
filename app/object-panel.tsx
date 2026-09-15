@@ -1,7 +1,21 @@
 import {motionPresets} from './motion-art';
 'use client';
-import {useRef,useState} from 'react';
+import {useEffect,useId,useRef,useState,type ButtonHTMLAttributes} from 'react';
+import {createPortal} from 'react-dom';
 import {type SlideObject,type TextStyle,fontFamilies,makeObject,parseGrid,objectSchema} from '@/lib/objects';
+function LayerAction({hint,...props}:ButtonHTMLAttributes<HTMLButtonElement>&{hint:string}){
+ const id=useId();
+ const [anchor,setAnchor]=useState<{right:number;top:number;below:boolean}|null>(null);
+ const show=(button:HTMLButtonElement)=>{const rect=button.getBoundingClientRect();setAnchor({right:Math.max(8,Math.min(window.innerWidth-rect.right,window.innerWidth-168)),top:rect.top<64?rect.bottom+8:rect.top-8,below:rect.top<64});};
+ useEffect(()=>{
+  if(!anchor)return;
+  const close=()=>setAnchor(null);
+  const escape=(e:KeyboardEvent)=>{if(e.key==='Escape'){e.stopPropagation();close();}};
+  window.addEventListener('scroll',close,true);window.addEventListener('resize',close);window.addEventListener('keydown',escape,true);
+  return()=>{window.removeEventListener('scroll',close,true);window.removeEventListener('resize',close);window.removeEventListener('keydown',escape,true);};
+ },[anchor]);
+ return <><button {...props} aria-describedby={anchor?id:undefined} onMouseEnter={e=>show(e.currentTarget)} onMouseLeave={()=>setAnchor(null)} onFocus={e=>show(e.currentTarget)} onBlur={()=>setAnchor(null)}/>{anchor&&createPortal(<div id={id} role="tooltip" className="layer-action-tooltip" style={{right:anchor.right,top:anchor.top,transform:anchor.below?'none':'translateY(-100%)'}}>{hint}</div>,document.body)}</>;
+}
 export async function uploadImage(file:File):Promise<string>{if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('PNG・JPEG・WebPを選んでください');if(file.size>10*1024*1024)throw Error('画像は10MBまでです');const data=await new Promise<string>((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result as string);r.onerror=reject;r.readAsDataURL(file);});const r=await fetch('/api/assets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data})});const result=await r.json() as {src:string;error?:string};if(!r.ok)throw Error(result.error);return result.src;}
 export function TextStyleControls({style,onChange}:{style:TextStyle;onChange:(s:TextStyle)=>void}){return <div className="text-style-controls">
  <label>フォント<select aria-label="フォント" value={style.fontFamily||'Hiragino Sans'} onChange={e=>onChange({...style,fontFamily:e.target.value as TextStyle['fontFamily']})}>{fontFamilies.map(f=><option key={f}>{f}</option>)}</select></label>
@@ -10,6 +24,7 @@ export function TextStyleControls({style,onChange}:{style:TextStyle;onChange:(s:
  <label>行間<input type="range" aria-label="行間" min=".8" max="3" step=".1" value={style.lineHeight||1.5} onChange={e=>onChange({...style,lineHeight:Number(e.target.value)})}/></label>
  </div>;}
 export function ObjectPanel({objects,selected,onSelect,onChange,onError,onImage}:{objects:SlideObject[];selected:string[];onSelect:(ids:string[])=>void;onChange:(objects:SlideObject[])=>void;onError:(message:string)=>void;onImage:(file:File,replaceId?:string)=>Promise<void>}){
+ const [insertOpen,setInsertOpen]=useState(true),[layersOpen,setLayersOpen]=useState(true);
  const svgFile=useRef<HTMLInputElement>(null);
  const file=useRef<HTMLInputElement>(null),replace=useRef(false);const [busy,setBusy]=useState(false),[csv,setCsv]=useState('');const object=objects.find(o=>o.id===selected[0]);
  function change(patch:Partial<SlideObject>){onChange(objects.map(o=>selected.includes(o.id)&&!o.locked?{...o,...patch}:o));}
@@ -28,13 +43,19 @@ export function ObjectPanel({objects,selected,onSelect,onChange,onError,onImage}
  function layer(direction:number){if(!object)return;const next=[...objects],i=next.findIndex(o=>o.id===object.id),j=Math.max(0,Math.min(next.length-1,i+direction));[next[i],next[j]]=[next[j],next[i]];onChange(next);}
  async function image(file:File){setBusy(true);try{await onImage(file,replace.current?object?.id:undefined);}catch(e){onError((e as Error).message);}finally{setBusy(false);replace.current=false;}}
  return <section className="object-panel">
+ <details className="object-section" open={insertOpen} onToggle={e=>setInsertOpen(e.currentTarget.open)}><summary>要素を追加</summary>
  <button type="button" onClick={()=>svgFile.current?.click()} disabled={objects.length>=100}>自作SVGアニメーションを追加</button><input ref={svgFile} type="file" accept=".svg,image/svg+xml" hidden aria-label="自作SVGファイル" onChange={e=>{if(e.target.files?.[0])void addSvg(e.target.files[0]);e.target.value='';}}/><p>SVGの動きをそのまま取り込みます。<a href="/samples/custom-motion.svg" download>サンプルSVG</a>を編集して作成できます。</p>
- <h3>挿入・レイヤー</h3><p>画像はキャンバスへドロップ、または ⌘V で貼り付け。文字はダブルクリックで直接編集できます。</p>
- <button type="button" className="object-image-upload" disabled={busy||objects.length>=100} onClick={()=>{replace.current=false;file.current?.click();}}><span>＋</span><span>{busy?"画像を読み込み中…":"画像を選んで追加"}<small>PNG・JPEG・WebP / ドロップ・⌘V にも対応</small></span></button><input ref={file} type="file" hidden accept="image/png,image/jpeg,image/webp" onChange={e=>{if(e.target.files?.[0])void image(e.target.files[0]);e.target.value='';}}/>
+ <p>画像はキャンバスへドロップ、または ⌘V で貼り付け。文字はダブルクリックで直接編集できます。</p>
+ <button type="button" className="object-image-upload" disabled={busy||objects.length>=100} onClick={()=>{replace.current=false;file.current?.click();}}><span>＋</span><span>{busy?"画像を読み込み中…":"画像を選んで追加"}<small>PNG・JPEG・WebP / ドロップ・⌘V にも対応</small></span></button>
  <div className="object-insert">{(['text','shape','table','chart','motion'] as const).map((kind,i)=><button type="button" key={kind} disabled={objects.length>=100} onClick={()=>add(kind)}>{['＋ テキスト','＋ 図形','＋ 表','＋ グラフ','＋ アニメーション'][i]}</button>)}<button type="button" disabled={busy||objects.length>=100} onClick={()=>{replace.current=false;file.current?.click();}}>{busy?'画像読込中…':'＋ 画像'}</button></div>
- {!!objects.length&&<><div className="layer-list" aria-label="レイヤー一覧">{[...objects].reverse().map(o=><div key={o.id} className={selected.includes(o.id)?'selected':''}><button type="button" onClick={e=>onSelect(e.shiftKey?[...new Set([...selected,o.id])]:o.groupId?objects.filter(x=>x.groupId===o.groupId).map(x=>x.id):[o.id])}>{o.groupId?'▣ ':''}{o.name}</button><button type="button" aria-label={`${o.name}を${o.hidden?'表示':'非表示'}`} onClick={()=>onChange(objects.map(x=>x.id===o.id?{...x,hidden:!x.hidden}:x))}>{o.hidden?'○':'●'}</button><button type="button" aria-label={`${o.name}のロック切替`} onClick={()=>onChange(objects.map(x=>x.id===o.id?{...x,locked:!x.locked}:x))}>{o.locked?'🔒':'◇'}</button></div>)}</div>
+ </details>
+ <input ref={file} type="file" hidden accept="image/png,image/jpeg,image/webp" onChange={e=>{if(e.target.files?.[0])void image(e.target.files[0]);e.target.value='';}}/>
+ <details className="object-section" open={layersOpen} onToggle={e=>setLayersOpen(e.currentTarget.open)}><summary>レイヤー（{objects.length}）</summary>
+ {!objects.length&&<p>追加した要素がここに表示されます。</p>}
+ {!!objects.length&&<><div className="layer-list" aria-label="レイヤー一覧">{[...objects].reverse().map(o=><div key={o.id} className={selected.includes(o.id)?'selected':''}><button type="button" onClick={e=>onSelect(e.shiftKey?[...new Set([...selected,o.id])]:o.groupId?objects.filter(x=>x.groupId===o.groupId).map(x=>x.id):[o.id])}>{o.groupId?'▣ ':''}{o.name}</button><LayerAction type="button" hint={o.hidden?'表示する':'非表示にする'} aria-label={`${o.name}を${o.hidden?'表示':'非表示'}`} onClick={()=>onChange(objects.map(x=>x.id===o.id?{...x,hidden:!x.hidden}:x))}>{o.hidden?'○':'●'}</LayerAction><LayerAction type="button" hint={o.locked?'ロックを解除':'ロックする'} aria-label={`${o.name}のロックを${o.locked?'解除':'設定'}`} onClick={()=>onChange(objects.map(x=>x.id===o.id?{...x,locked:!x.locked}:x))}>{o.locked?'🔒':'◇'}</LayerAction></div>)}</div>
  <div className="object-button-row"><button type="button" disabled={!object} onClick={()=>layer(1)}>前面へ</button><button type="button" disabled={!object} onClick={()=>layer(-1)}>背面へ</button><button type="button" disabled={!selected.length} onClick={()=>onChange(objects.filter(o=>!selected.includes(o.id)||o.locked))}>削除</button><button type="button" disabled={!object} onClick={()=>{const copy=objects.filter(o=>selected.includes(o.id)).map(o=>({...o,id:crypto.randomUUID(),groupId:undefined,x:o.x+24,y:o.y+24,locked:false}));onChange([...objects,...copy]);onSelect(copy.map(o=>o.id));}}>複製</button></div>
  <div className="object-button-row"><button type="button" disabled={selected.length<2} onClick={()=>change({groupId:crypto.randomUUID()})}>グループ化</button><button type="button" disabled={!object?.groupId} onClick={()=>change({groupId:undefined})}>解除</button><button type="button" disabled={!object} onClick={()=>onChange(objects.map(o=>selected.includes(o.id)&&!o.locked?{...o,x:(1600-o.w)/2}:o))}>左右中央</button><button type="button" disabled={!object} onClick={()=>onChange(objects.map(o=>selected.includes(o.id)&&!o.locked?{...o,y:(900-o.h)/2}:o))}>上下中央</button></div></>}
+ </details>
  {object&&<fieldset disabled={object.locked} className="object-properties"><label>要素名<input aria-label="要素名" value={object.name} onChange={e=>change({name:e.target.value.slice(0,100)})}/></label>
  <label>クリック表示の順番（0＝最初から）<input aria-label="要素の表示順番" type="number" min="0" max="100" value={object.appearAt||0} onChange={e=>change({appearAt:Math.max(0,Math.min(100,Math.round(Number(e.target.value))))})}/></label><div className="object-geometry">{(['x','y','w','h','rotation','opacity'] as const).map((key,i)=><label key={key}>{['X','Y','幅','高さ','回転','不透明度'][i]}<input aria-label={`要素の${['X','Y','幅','高さ','回転','不透明度'][i]}`} type="number" step={key==='opacity'?'.05':'1'} value={Math.round(object[key]*100)/100} onChange={e=>{const value=Number(e.target.value);const test=objectSchema.safeParse({...object,[key]:value});if(test.success)change({[key]:value});}}/></label>)}</div>
  {object.kind==='text'&&<><textarea aria-label="自由テキスト" value={object.text} rows={4} maxLength={12000} onChange={e=>change({text:e.target.value})}/><button type="button" onClick={()=>change({text:object.text.split('\n').map(t=>t.startsWith('• ')?t.slice(2):`• ${t}`).join('\n')})}>箇条書きを切替</button><TextStyleControls style={object.style} onChange={style=>change({style})}/><button type="button" onClick={()=>{const el=document.querySelector<HTMLElement>(`[data-free-object="${CSS.escape(object.id)}"] .free-object-body`);if(el){const ratio=Math.min(1,el.clientHeight/Math.max(el.scrollHeight,1),el.clientWidth/Math.max(el.scrollWidth,1));change({style:{...object.style,fontSize:Math.max(6,Math.floor((object.style.fontSize||32)*ratio*.95))}});}}}>文字を枠内に収める</button></>}
