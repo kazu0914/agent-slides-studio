@@ -17,6 +17,8 @@ export function ObjectChart({object:o}:{object:SlideObject}){
 }
 function ObjectBody({object:o,editing,inspect=false,onText}:{object:SlideObject;editing:boolean;inspect?:boolean;onText:(text:string)=>void}){
  const ref=useRef<HTMLDivElement>(null);const [overflow,setOverflow]=useState(false);
+ // 編集モードへの切り替え時に入力先も移し、Deleteが要素削除に流れないようにする。
+ useLayoutEffect(()=>{if(editing)ref.current?.querySelector<HTMLElement>('[data-object-text]')?.focus();},[editing]);
  useLayoutEffect(()=>{const el=ref.current;if(!el)return;if(o.kind!=='text'&&o.kind!=='table'){setOverflow(false);return;}const measure=()=>setOverflow(el.scrollHeight>el.clientHeight+2||el.scrollWidth>el.clientWidth+2);measure();const ro=new ResizeObserver(measure);ro.observe(el);return()=>ro.disconnect();},[o]);
  return <div ref={ref} data-text-overflow={overflow?"true":undefined} className={`free-object-body ${overflow&&inspect?'text-overflow':''}`} style={{...textCss(o.style),width:'100%',height:'100%',overflow:'hidden',...(o.kind==='text'?{display:'flex',flexDirection:'column',justifyContent:o.verticalAlign==='center'?'center':o.verticalAlign==='bottom'?'flex-end':'flex-start'}:{})}}>
  {o.kind==='text'&&<div data-object-text contentEditable={editing?'plaintext-only':false} suppressContentEditableWarning style={{width:'100%',flexShrink:0,whiteSpace:'pre-wrap',outline:0}} onBlur={e=>onText(e.currentTarget.innerText)} onKeyDown={e=>e.stopPropagation()}>{o.text}</div>}

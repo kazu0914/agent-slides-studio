@@ -1,4 +1,8 @@
 "use client";
+import {useRangeSelection,emptySelection,type CanvasSelection} from './use-range-selection';
+import {usePresentationRecords} from './use-presentation-records';
+import {alignSelection,type Alignment} from './align-selection';
+import {DragGuides} from './drag-guides';
 import CardHandles from "./card-handles";
 import BrandLogo from "./brand-logo";
 import SlideGrid from "./slide-grid";
@@ -12,6 +16,7 @@ import { MotionArt, motionPresets } from "./motion-art";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -50,6 +55,7 @@ import {
 import {
   initialDeck,
   deckSchema,
+  slideSchema,
   diffDeck,
   applyProposal,
   proposalSchema,
@@ -87,8 +93,13 @@ async function request(url: string, options?: RequestInit) {
   if (!response.ok) throw new Error(data.error || "接続に失敗しました");
   return data;
 }
+function BaseSelectionOutline({host,elementKey,slide}:{host:React.RefObject<HTMLDivElement|null>;elementKey:ElementKey;slide:Slide}){
+ const [box,setBox]=useState<{x:number;y:number;w:number;h:number}|null>(null);
+ useLayoutEffect(()=>{const root=host.current,el=root?.querySelector(`[data-edit-element="${elementKey}"]`);if(!root||!el)return;const a=root.getBoundingClientRect(),b=el.getBoundingClientRect();setBox({x:(b.left-a.left)/a.width*100,y:(b.top-a.top)/a.height*100,w:b.width/a.width*100,h:b.height/a.height*100});},[host,elementKey,slide]);
+ return box?<div className="canvas-base-selected" style={{left:`${box.x}%`,top:`${box.y}%`,width:`${box.w}%`,height:`${box.h}%`}}/>:null;
+}
 export function SlideView({
-  slide,
+  slide:sourceSlide,
   index,
   total,
   animate = true,
@@ -106,8 +117,12 @@ export function SlideView({
   onPlacement,
   onGesture,
   objectSelection=[],onObjectSelection,onObjects,revealStep=Infinity,
+  cardSelection=[],onCardSelection=()=>{},
+  baseSelection=[],rangeEnabled=false,onCanvasSelection=()=>{},onSelectionEdit,
 }: {
   revealStep?:number;
+  baseSelection?:ElementKey[];rangeEnabled?:boolean;onCanvasSelection?:(s:CanvasSelection)=>void;onSelectionEdit?:(patch:Partial<Slide>)=>void;
+  cardSelection?:number[];onCardSelection?:(ids:number[])=>void;
   objectSelection?:string[];onObjectSelection?:(ids:string[])=>void;onObjects?:(objects:SlideObject[])=>void;
   slide: Slide;
   index: number;
@@ -130,6 +145,9 @@ export function SlideView({
   onPlacement?: (key: ElementKey, value: ElementPlacement) => void;
   onGesture?: () => void;
 }) {
+  const slideRoot = useRef<HTMLDivElement>(null);
+  const rangeSelection=useRangeSelection(slideRoot,sourceSlide,rangeEnabled&&editable,{cards:cardSelection,objects:objectSelection,elements:baseSelection},onCanvasSelection,onSelectionEdit);
+  const slide=rangeSelection.preview?{...sourceSlide,...rangeSelection.preview}:sourceSlide;
   const artworkKind =
     slide.artworkKind ??
     (slide.layout === "hero"
@@ -137,9 +155,7 @@ export function SlideView({
       : slide.layout === "statement"
         ? "arrow"
         : "none");
-  const slideRoot = useRef<HTMLDivElement>(null);
-  const [cardSelection,setCardSelection] = useState<number[]>([]);
-  useEffect(()=>setCardSelection([]),[slide.id,slide.items.length]);
+  const setCardSelection=onCardSelection;
   const [points, setPoints] = useState<[number, number][]>([]);
   const active = useRef<[number, number][] | null>(null);
   const svg = useRef<SVGSVGElement>(null);
@@ -160,6 +176,9 @@ export function SlideView({
   return (
     <div
       ref={slideRoot}
+      {...rangeSelection.handlers}
+      tabIndex={rangeEnabled?0:undefined}
+      data-range-enabled={rangeEnabled?"true":undefined}
       style={
         {
           ...Object.fromEntries(
@@ -197,6 +216,7 @@ export function SlideView({
       className={`slide ${slide.imported ? "imported-slide" : ""} theme-${slide.backgroundTemplate && slide.backgroundTemplate !== "none" ? "white" : slide.theme} layout-${slide.layout} ${!slide.backgroundTemplate || slide.backgroundTemplate === "none" ? (slide.theme !== "white" ? "hero-slide" : "") : ""} ${"motion-" + slide.animation} ${animate ? "" : "motion-paused"} ${editing ? "editing-slide" : ""}`}
       data-testid="slide-canvas"
     >
+      <DragGuides guides={rangeSelection.guides}/>
       <CanvasText
         as="div"
         className="slide-eyebrow"
@@ -261,12 +281,12 @@ export function SlideView({
           data-edit-element="items"
           className={`slide-items ${slide.layout === "flow" ? "flow-items" : ""}`}
         >
-          {editable&&onEdit&&<div className="card-selection-tools"><button type="button" onClick={()=>setCardSelection(slide.items.map((_,i)=>i))}>カードをすべて選択</button>{cardSelection.length>0&&<><span>{cardSelection.length}件選択中</span><button type="button" onClick={()=>setCardSelection([])}>解除</button></>}<small>Shift＋クリックで複数選択 →「移動」をドラッグ</small></div>}
           {slide.items.map((item, i) => (
             <div
               className={`slide-item ${editable&&cardSelection.includes(i)?'card-selected':''}`}
-              onPointerDownCapture={e=>{if(editable&&(e.shiftKey||e.metaKey||e.ctrlKey)&&!(e.target as HTMLElement).closest('button')){e.preventDefault();e.stopPropagation();setCardSelection(ids=>ids.includes(i)?ids.filter(id=>id!==i):[...ids,i]);}}}
+              onPointerDownCapture={e=>{if(editable&&(e.shiftKey||e.metaKey||e.ctrlKey)&&!(e.target as HTMLElement).closest('button')){e.preventDefault();e.stopPropagation();setCardSelection(cardSelection.includes(i)?cardSelection.filter(id=>id!==i):[...cardSelection,i]);}}}
               key={i}
+              data-card-index={i}
               style={{ animationDelay: `${i * 0.25 + 0.15}s`,...(item.box?{position:'absolute',left:`${item.box.x}%`,top:`${item.box.y}%`,width:`${item.box.w}%`,height:`${item.box.h}%`,boxSizing:'border-box'}:{}) }}
             >
               {editable&&onEdit&&<CardHandles index={i} selected={cardSelection} onSelect={setCardSelection} items={slide.items} onChange={items=>onEdit('items',items)} onBegin={()=>{onActivate?.();onGesture?.();}}/>}
@@ -332,6 +352,8 @@ export function SlideView({
         />
       )}
       <FreeObjects objects={(slide.objects||[]).filter(o=>(o.appearAt||0)<=revealStep)} editable={(editing || editable) && !marker && !!onObjects} selected={objectSelection} onSelect={onObjectSelection} onChange={onObjects} onBegin={onGesture}/>
+      {!marker&&baseSelection.map(key=><BaseSelectionOutline key={key} host={slideRoot} elementKey={key} slide={slide}/>)}
+      {rangeSelection.range&&<div className="canvas-range-selection" data-testid="range-selection" style={{left:`${rangeSelection.range.x}%`,top:`${rangeSelection.range.y}%`,width:`${rangeSelection.range.w}%`,height:`${rangeSelection.range.h}%`}}/>}
       <svg
         ref={svg}
         className={`ink-layer ${marker ? "drawing" : ""}`}
@@ -483,6 +505,10 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
     });
   }
   const [objectSelection,setObjectSelection]=useState<string[]>([]);
+  const [cardSelection,setCardSelection]=useState<number[]>([]);
+  const [baseSelection,setBaseSelection]=useState<ElementKey[]>([]);
+  const [selectionTool,setSelectionTool]=useState(true);
+  const selectCanvas=(value:CanvasSelection)=>{setCardSelection(value.cards);setObjectSelection(value.objects);setBaseSelection(value.elements);};
   const [styleTarget,setStyleTarget]=useState<"title"|"body"|"eyebrow"|"items">("title");
   const [objectBusy,setObjectBusy]=useState(false);
   const [layoutEditing, setLayoutEditing] = useState(false);
@@ -498,6 +524,8 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
   const [historyTick, setHistoryTick] = useState(0);
   const recoveryKey = `frame-draft-v1:${deckId}`;
   const deckUrl = `/api/deck?deckId=${encodeURIComponent(deckId)}`;
+  const presentationRecords=usePresentationRecords(deckId);
+  const [memoOpen,setMemoOpen]=useState(false);
   const [notesOpen, setNotesOpen] = useState(true);
   useEffect(() => {
     // ブラウザに保存した表示設定を初回マウント時に同期する。
@@ -617,9 +645,9 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
   const presenterChannel=useRef<BroadcastChannel|null>(null);
   const presenterWindow=useRef<Window|null>(null);
   const presenterState=useRef<PresenterState|null>(null);
-  const presenterActions=useRef<(type:string)=>void>(()=>{});
+  const presenterActions=useRef<(type:string,slideId?:string,memo?:string)=>void>(()=>{});
   useEffect(()=>{setRevealStep(0);},[selected,present]);
-  useEffect(()=>{const c=new BroadcastChannel('studio-presenter:'+presenterToken.current);presenterChannel.current=c;c.onmessage=e=>{if(e.data.type==='ready'){if(presenterState.current)c.postMessage({type:'state',state:presenterState.current});}else presenterActions.current(e.data.type);};return()=>c.close();},[]);
+  useEffect(()=>{const c=new BroadcastChannel('studio-presenter:'+presenterToken.current);presenterChannel.current=c;c.onmessage=e=>{if(e.data.type==='ready'){if(presenterState.current)c.postMessage({type:'state',state:presenterState.current});}else presenterActions.current(e.data.type,e.data.slideId,e.data.memo);};return()=>c.close();},[]);
   const [controlsVisible, setControlsVisible] = useState(true);
   const presentationViewport = useRef<HTMLDivElement>(null);
   const presentationZoom = usePresentationZoom(
@@ -630,6 +658,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
   useEffect(() => {
     if (!present) return;
     const toggle = (e: KeyboardEvent) => {
+      if((e.target as HTMLElement).closest("input,textarea,select,[contenteditable]"))return;
       if (e.key.toLowerCase() === "h" && !e.metaKey && !e.ctrlKey) {
         e.preventDefault();
         setControlsVisible((v) => !v);
@@ -656,6 +685,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
     work.deck.slides[Math.min(selected, work.deck.slides.length - 1)];
   const draft = drafts[slide.id] ?? slide;
   const reason = reasons[slide.id] ?? "";
+  useEffect(()=>selectCanvas(emptySelection()),[slide.id,draft.items.length]);
   function setReason(value: string) {
     setReasons((r) => ({ ...r, [slide.id]: value }));
   }
@@ -1001,7 +1031,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
   }
   async function clipboardShortcut(e: React.KeyboardEvent) {
     if(!e.ctrlKey||e.metaKey||!['c','v'].includes(e.key.toLowerCase())||present||locked)return;
-    if((e.target as HTMLElement).closest('input,textarea,select,[contenteditable]'))return;
+    if((e.target as HTMLElement).closest('input,textarea,select,[contenteditable="true"],[contenteditable="plaintext-only"]'))return;
     const target=e.target as HTMLElement;
     const data=new DataTransfer();
     if(e.key.toLowerCase()==='c'){
@@ -1015,8 +1045,13 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
     if(present || locked)return;
     const target=e.target as HTMLElement;
     if(target.closest('input,textarea,select') || (target.closest('[contenteditable]') && !window.getSelection()?.isCollapsed))return;
+    if(target.closest('.thumb-list,.slide-grid-card,.slide-grid-list')){
+      e.preventDefault();
+      e.clipboardData.setData('text/plain',JSON.stringify({agentSlidesSlide:structuredClone(draft)}));
+      return;
+    }
     let objects: SlideObject[]=[];
-    if(target.closest('[data-free-object]'))objects=(draft.objects||[]).filter(o=>objectSelection.includes(o.id));
+    if(objectSelection.length&&!target.closest('[contenteditable="true"],[contenteditable="plaintext-only"]'))objects=(draft.objects||[]).filter(o=>objectSelection.includes(o.id));
     else {
       const el=target.closest('[data-edit-element]') as HTMLElement|null;
       const key=el?.dataset.editElement || (target.closest('.element-box')?selectedElement:null);
@@ -1035,9 +1070,25 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
   function pasteSelection(e: React.ClipboardEvent) {
     if(present||locked)return;
     const target=e.target as HTMLElement;
-    if(target.closest('input,textarea,select,[contenteditable]'))return;
+    if(target.closest('input,textarea,select,[contenteditable="true"],[contenteditable="plaintext-only"]'))return;
     try {
       const data=JSON.parse(e.clipboardData.getData('text/plain'));
+      if(data.agentSlidesSlide){
+        if(!target.closest('.thumb-list,.slide-grid-card,.slide-grid-list'))return;
+        e.preventDefault();
+        const copied=slideSchema.parse(data.agentSlidesSlide);
+        if(Object.keys(drafts).length||pending.current){setError('編集中の内容の保存が完了してから、スライドを貼り付けてください。');return;}
+        const next=structuredClone(workRef.current.deck);
+        if(next.slides.length>=50){setError('スライドは50枚までです。');return;}
+        const groups=new Map<string,string>();
+        copied.id=crypto.randomUUID();
+        copied.objects=copied.objects?.map(o=>{if(o.groupId&&!groups.has(o.groupId))groups.set(o.groupId,crypto.randomUUID());return {...o,id:crypto.randomUUID(),groupId:o.groupId?groups.get(o.groupId):undefined};});
+        copied.strokes=copied.strokes.map(stroke=>({...stroke,id:crypto.randomUUID()}));
+        const index=Math.min(selectedRef.current+1,next.slides.length);
+        next.slides.splice(index,0,copied);
+        void commit(next,'スライドをコピーして貼り付け').then(()=>{setSelected(index);selectCanvas(emptySelection());requestAnimationFrame(()=>document.querySelector<HTMLElement>(gridOpen?`.slide-grid-card[data-slide-id="${copied.id}"]`:`.thumb-row[data-slide-id="${copied.id}"]`)?.focus());}).catch(()=>{});
+        return;
+      }
       if(!Array.isArray(data.agentSlidesObjects)||!data.agentSlidesObjects.length)return;
       const items=data.agentSlidesObjects.map((o:unknown)=>objectSchema.parse(o)) as SlideObject[];
       if((draft.objects?.length||0)+items.length>100)return;
@@ -1071,29 +1122,28 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
     setSelectedElement("artwork");
     setLayoutEditing(true);
   }
-  useEffect(() => {
-    const remove = (e: KeyboardEvent) => {
-      if (
-        !layoutEditing ||
-        present ||
-        locked ||
-        selectedElement !== "artwork" ||
-        !["Delete", "Backspace"].includes(e.key)
-      )
-        return;
-      if (
-        (e.target as HTMLElement).closest(
-          "input,textarea,select,[data-free-object],[contenteditable]",
-        )
-      )
-        return;
-      e.preventDefault();
-      changeDraft("artworkKind", "none");
-      setLayoutEditing(false);
-    };
-    window.addEventListener("keydown", remove);
-    return () => window.removeEventListener("keydown", remove);
-  });
+  function alignSelected(mode:Alignment){
+    if(locked||present||marker)return;
+    const root=document.querySelector<HTMLElement>('.center .slide');if(!root)return;
+    const patch=alignSelection(root,draft,{cards:cardSelection,objects:objectSelection,elements:baseSelection},mode);if(!patch)return;
+    recordDraft('align-selection',true);setDraftError('');
+    setDrafts(d=>{if(!d[slide.id])draftBases.current[slide.id]=structuredClone(slide);return {...d,[slide.id]:{...(d[slide.id]??slide),...patch}};});
+  }
+  function deleteSelection(e:React.KeyboardEvent){
+    if(present||locked||marker||gridOpen||e.isDefaultPrevented()||e.nativeEvent.isComposing||e.metaKey||e.ctrlKey||e.altKey||!['Delete','Backspace'].includes(e.key))return;
+    const target=e.target as HTMLElement;
+    if(target.closest('input,textarea,select,[contenteditable="true"],[contenteditable="plaintext-only"],[aria-modal="true"]'))return;
+    if(!target.closest('.center,.layer-list,.object-button-row,.element-box'))return;
+    const patch:Partial<Slide>={};
+    if(objectSelection.some(id=>draft.objects?.some(o=>o.id===id&&!o.locked)))patch.objects=(draft.objects||[]).filter(o=>!objectSelection.includes(o.id)||o.locked);
+    if(cardSelection.length)patch.items=draft.items.filter((_,i)=>!cardSelection.includes(i));
+    const elements=layoutEditing?[selectedElement]:baseSelection;
+    for(const key of elements){if(key==='artwork')patch.artworkKind='none';else if(key==='items')patch.items=[];else if(key==='title'||key==='body'||key==='eyebrow')patch[key]='';}
+    if(!Object.keys(patch).length)return;
+    e.preventDefault();e.stopPropagation();recordDraft('delete-selection',true);setDraftError('');
+    setDrafts(d=>{if(!d[slide.id])draftBases.current[slide.id]=structuredClone(slide);return {...d,[slide.id]:{...(d[slide.id]??slide),...patch}};});
+    selectCanvas(emptySelection());setLayoutEditing(false);
+  }
   function discardDraft() {
     setRecoveryNotice("");
     undoDrafts.current = [];
@@ -1261,10 +1311,12 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
   }
   function draw(stroke: Stroke) {
     const id = workRef.current.deck.slides[selectedRef.current].id;
-    setSessionInk(ink => ({...ink, [id]: [...(ink[id] || []), stroke].slice(-100)}));
+    if(present)presentationRecords.update(id,{ink:[...(presentationRecords.records[id]?.ink||[]),stroke].slice(-100)});
+    else setSessionInk(ink => ({...ink, [id]: [...(ink[id] || []), stroke].slice(-100)}));
   }
   function undoInk() {
-    setSessionInk(ink => ({...ink, [slide.id]: (ink[slide.id] || []).slice(0,-1)}));
+    if(present)presentationRecords.update(slide.id,{ink:(presentationRecords.records[slide.id]?.ink||[]).slice(0,-1)});
+    else setSessionInk(ink => ({...ink, [slide.id]: (ink[slide.id] || []).slice(0,-1)}));
   }
   function stage(input: unknown, scope:Scope={mode:aiScope,slideId:slide.id,objectIds:objectSelection}) {
     const raw = proposalSchema.parse(input);
@@ -1438,8 +1490,8 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
   function advancePresentation(){const n=nextStep(slide,revealStep);if(n!==undefined)setRevealStep(n);else setSelected(i=>Math.min(i+1,work.deck.slides.length-1));}
   function backPresentation(){if(revealStep>0)setRevealStep(previousStep(slide,revealStep));else setSelected(i=>Math.max(0,i-1));}
   function openPresenter(){presenterWindow.current=window.open('/presenter?session='+presenterToken.current,'presenter-'+presenterToken.current,'popup,width=1280,height=900');if(!presenterWindow.current)setError('発表者画面を開けませんでした。ポップアップを許可してください。');}
-  useEffect(()=>{const state={deck:work.deck,selected,step:revealStep,playing,present,started};presenterState.current=state;presenterChannel.current?.postMessage({type:'state',state});},[work.deck,selected,revealStep,playing,present,started]);
-  presenterActions.current=type=>{if(type==='resetTimer'){setStarted(Date.now());return;}if(!present)return;if(type==='next')advancePresentation();if(type==='previous')backPresentation();if(type==='pause')setPlaying(p=>!p);if(type==='end')exitPresent();};
+  useEffect(()=>{const state={deck:work.deck,selected,step:revealStep,playing,present,started,records:presentationRecords.records,memoStatus:presentationRecords.status};presenterState.current=state;presenterChannel.current?.postMessage({type:'state',state});},[work.deck,selected,revealStep,playing,present,started,presentationRecords.records,presentationRecords.status]);
+  presenterActions.current=(type,slideId,memo)=>{if(type==='memo'&&typeof memo==='string'&&slideId&&work.deck.slides.some(s=>s.id===slideId)){presentationRecords.update(slideId,{memo:memo.slice(0,10000)});return;}if(type==='resetTimer'){setStarted(Date.now());return;}if(!present)return;if(type==='next')advancePresentation();if(type==='previous')backPresentation();if(type==='pause')setPlaying(p=>!p);if(type==='end')exitPresent();};
   useEffect(()=>{
     if(presentAfterSave&&!Object.keys(drafts).length&&!locked&&!autosaveError)void startPresent();
   },[presentAfterSave,drafts,locked,autosaveError]);
@@ -1450,6 +1502,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
     }
     setPresentAfterSave(false);
     setSessionInk({});
+    setMemoOpen(false);
     setControlsVisible(true);
     setStarted(Date.now());setRevealStep(0);setPresent(true);
     setMarker(false);
@@ -1463,7 +1516,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
     setMarker(false);
     if (document.fullscreenElement) void document.exitFullscreen();
   }
-  const visibleSlide = { ...(!present ? draft : slide), strokes: sessionInk[slide.id] || [] };
+  const visibleSlide = { ...(!present ? draft : slide), strokes: (present ? presentationRecords.records[slide.id]?.ink : sessionInk[slide.id]) || [] };
   const logs = work.logs.filter(
     (l) => !filterLog || l.changes.some((c) => c.slideId === slide.id),
   );
@@ -1488,7 +1541,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
     </main>
   </div>;
   return (
-    <div className="studio" onKeyDown={clipboardShortcut} onCopy={copySelection} onPaste={pasteSelection}>
+    <div className="studio" onKeyDownCapture={deleteSelection} onKeyDown={clipboardShortcut} onCopy={copySelection} onPaste={pasteSelection}>
       {gridOpen&&<SlideGrid slides={work.deck.slides.map(s=>drafts[s.id]??s)} selected={selected} onClose={()=>setGridOpen(false)} onSelect={i=>{setSelected(i);setReplay(r=>r+1);}} thumbnail={(s,i)=><SlideThumbnail slide={s} index={i} total={work.deck.slides.length}/>}/>}
       {objectBusy&&<div role="status" className="upload-status">画像を読み込んでいます…</div>}
       <header className="topbar">
@@ -1728,18 +1781,19 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
               <button
                 aria-label="選択ツール"
                 title="選択ツール"
-                className={!marker ? "active" : ""}
-                onClick={() => setMarker(false)}
+                className={!marker&&selectionTool ? "active" : ""}
+                onClick={() => {setMarker(false);setSelectionTool(true);}}
               >
                 <MousePointer2 size={17} />
               </button>
               <button
                 aria-label="テキストを編集"
                 title="テキストを編集"
-                className={tab === "edit" ? "active" : ""}
+                className={!marker&&!selectionTool ? "active" : ""}
                 onClick={() => {
                   setTab("edit");
                   setMarker(false);
+                  setSelectionTool(false);
                 }}
               >
                 <Type size={17} />
@@ -1823,6 +1877,18 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
               要素の配置・サイズ
             </button>
             <button type="button" aria-label="編集枠の表示切替" aria-pressed={showEditGuides} onClick={()=>setShowEditGuides(value=>{localStorage.setItem("agent-slides-edit-guides",value?"hidden":"visible");return !value;})}>{showEditGuides?"編集枠を非表示":"編集枠を表示"}</button>
+            {!!(cardSelection.length+objectSelection.length+baseSelection.length)&&!marker&&!layoutEditing&&showEditGuides&&<div className="card-selection-tools" role="group" aria-label="カードの選択操作">
+              <span aria-live="polite">{cardSelection.length+objectSelection.length+baseSelection.length}件選択中</span>
+              <button type="button" disabled={locked} onClick={()=>setCardSelection(draft.items.map((_,i)=>i))}>カードをすべて選択</button>
+              <select aria-label="選択した要素を整列" value="" disabled={locked||cardSelection.length+objectSelection.length+baseSelection.length<2} onChange={e=>{alignSelected(e.target.value as Alignment);e.currentTarget.blur();}}>
+                <option value="" disabled>整列・等間隔</option>
+                <option value="left">左揃え</option><option value="center">左右中央揃え</option><option value="right">右揃え</option>
+                <option value="top">上揃え</option><option value="middle">上下中央揃え</option><option value="bottom">下揃え</option>
+                <option value="horizontal" disabled={cardSelection.length+objectSelection.length+baseSelection.length<3}>横に等間隔</option><option value="vertical" disabled={cardSelection.length+objectSelection.length+baseSelection.length<3}>縦に等間隔</option>
+              </select>
+              <button type="button" onClick={()=>selectCanvas(emptySelection())}>解除</button>
+              <button type="button" className="card-selection-help" aria-label="カードの選択・移動の操作方法" title="余白からドラッグして範囲選択。Shiftで追加選択。選択した要素をドラッグ、または矢印キーで移動。Escで解除。">?</button>
+            </div>}
             <span>
               {Object.keys(drafts).length
                 ? "下書きはこのブラウザに自動保存"
@@ -1883,6 +1949,10 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                 <SlideView
                   key={slide.id + replay}
                   slide={visibleSlide}
+                  cardSelection={cardSelection} onCardSelection={setCardSelection}
+                  baseSelection={baseSelection} rangeEnabled={selectionTool&&!locked&&!marker&&!layoutEditing}
+                  onCanvasSelection={selectCanvas}
+                  onSelectionEdit={patch=>{recordDraft('canvas-selection',true);setDraftError('');setDrafts(d=>{if(!d[slide.id])draftBases.current[slide.id]=structuredClone(slide);return {...d,[slide.id]:{...(d[slide.id]??slide),...patch}};});}}
                   objectSelection={objectSelection} onObjectSelection={ids=>{setObjectSelection(ids);setLayoutEditing(false);setTab("edit");}} onObjects={objects=>changeDraft("objects",objects)}
                   index={selected}
                   total={work.deck.slides.length}
@@ -1980,6 +2050,11 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
               {draft.notes || "プレゼンテーションで伝えたいことをメモ…"}
             </p>
           </section>
+          <details className="presentation-memo-editor">
+            <summary>プレゼン中のメモ{presentationRecords.records[slide.id]?.memo?' · メモあり':''}</summary>
+            <label>スライド {selected+1} のメモ<textarea aria-label="保存したプレゼンメモ" maxLength={10000} value={presentationRecords.records[slide.id]?.memo||''} onChange={e=>presentationRecords.update(slide.id,{memo:e.target.value})}/></label>
+            <small role="status">{presentationRecords.status} · スピーカーノートとは別に保存</small>
+          </details>
           <footer className="statusbar">
             <span>
               <i /> {work.deck.slides.length} slides{" "}
@@ -2736,7 +2811,15 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
               操作を表示 <kbd>H</kbd>
             </button>
           )}
+          {presentationRecords.status.startsWith('保存できません')&&<div className="presentation-save" role="alert">{presentationRecords.status}</div>}
+          {memoOpen&&<section className="presentation-memo-panel" aria-label="プレゼンメモ">
+            <header><strong>スライド {selected+1} のメモ</strong><button aria-label="メモを閉じる" onClick={()=>setMemoOpen(false)}>×</button></header>
+            <p>このパネルは投影画面にも表示されます。非公開の入力は発表者画面で。</p>
+            <textarea autoFocus aria-label="プレゼン中のメモ" maxLength={10000} value={presentationRecords.records[slide.id]?.memo||''} onChange={e=>presentationRecords.update(slide.id,{memo:e.target.value})} onKeyDown={e=>{if(e.key==='Escape'){e.stopPropagation();setMemoOpen(false);}}}/>
+            <small role="status">{presentationRecords.status}</small>
+          </section>}
           <div className="presentation-controls" hidden={!controlsVisible}>
+            <button aria-label="プレゼンメモを開く" aria-expanded={memoOpen} onClick={()=>setMemoOpen(v=>!v)}>メモ</button>
             <button
               disabled={selected === 0 && revealStep===0}
               aria-label="前のスライド（プレゼン）"
@@ -2786,12 +2869,13 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
               <option value={6}>細い</option><option value={18}>標準</option><option value={32}>太い</option>
             </select></label>
             <button
-              disabled={locked || !(sessionInk[slide.id]?.length)}
+              disabled={locked || !(presentationRecords.records[slide.id]?.ink.length)}
               aria-label="マーカーを取り消す（プレゼン）"
               onClick={undoInk}
             >
               <Undo2 size={16} />
             </button>
+            <button aria-label="このスライドのマーカーを消去" disabled={!presentationRecords.records[slide.id]?.ink.length} onClick={()=>presentationRecords.update(slide.id,{ink:[]})}>消去</button>
             <i />
             <button
               aria-label="アニメーション再生切替"

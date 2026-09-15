@@ -1228,7 +1228,7 @@ h3 {
   inset: 0;
   width: 100%;
   height: 100%;
-  z-index: 5;
+  z-index: 50;
   touch-action: none;
 }
 .ink-layer.drawing {
@@ -2418,7 +2418,7 @@ kbd {
 [data-edit-element="items"]{rotate:var(--items-rotation,0deg)}.free-objects:has([data-free-object][tabindex]){z-index:31}
 
 /* 編集補助だけを隠し、スライドの内容や保存データは変更しない。 */
-.edit-guides-hidden .element-overlay,.edit-guides-hidden .card-handle,.edit-guides-hidden .object-name,.edit-guides-hidden .object-resize,.edit-guides-hidden .snap-guide{display:none!important}
+.edit-guides-hidden .element-overlay,.edit-guides-hidden .card-handle,.edit-guides-hidden .object-name,.edit-guides-hidden .object-resize{display:none!important}
 .edit-guides-hidden .object-selected,.edit-guides-hidden .canvas-text-editable{outline:none!important}
 /* マウスが要素を離れたら補助表示を隠す。ドラッグ中は :active で維持する。 */
 .element-box:not(:hover):not(:active){border-color:transparent}
@@ -2636,7 +2636,37 @@ kbd {
 .sortable-slides{position:relative;}.sortable-slides .sr-only{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;}.sortable-slides .thumb-row{touch-action:none;user-select:none;cursor:grab;}.sortable-slides.is-sorting,.sortable-slides.is-sorting .thumb-row{cursor:grabbing;}.slide-insertion-line{position:absolute;left:14px;right:14px;height:3px;border-radius:2px;background:#2454ef;pointer-events:none;z-index:2;}.slide-insertion-line:before{content:'';position:absolute;left:-3px;top:-2px;width:7px;height:7px;border-radius:50%;background:#2454ef;}
 
 .web-search-control{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-size:12px;margin:10px 0;color:#334155}.web-search-control input{width:15px;height:15px;accent-color:#2454ef}.web-search-control small{flex-basis:100%;font-size:10px;color:#64748b;padding-left:21px}
-.card-selected{outline:2px solid #5278ff;outline-offset:3px}.slide-item.card-selected .card-handle,.slide-item:focus-within .card-handle{opacity:1;pointer-events:auto}.slide-item .card-handle-select{left:0;top:-22px;height:20px;padding:0 5px;font-size:10px;border-radius:4px;cursor:pointer}.card-selection-tools{position:absolute;left:0;top:-54px;display:flex;align-items:center;gap:7px;font-size:10px;white-space:nowrap;color:#2454ef;z-index:25}.card-selection-tools button{background:white;color:#2454ef;border:1px solid #b6c7ff;border-radius:4px;padding:3px 6px;font-size:10px}.card-selection-tools small{font-size:9px;color:inherit}
+.card-selected{outline:2px solid #5278ff;outline-offset:3px}.slide-item.card-selected .card-handle,.slide-item:focus-within .card-handle{opacity:1;pointer-events:auto}.slide-item .card-handle-select{left:0;top:-22px;height:20px;padding:0 5px;font-size:10px;border-radius:4px;cursor:pointer}
 .slide-items .slide-item.card-selected .card-handle,.slide-items .slide-item:focus-within .card-handle{opacity:1;pointer-events:auto}
-.card-selection-tools{background:#fff;border:1px solid #d5dff4;border-radius:6px;padding:3px 5px;user-select:none}.card-selection-tools small{color:#52627d}
-.edit-guides-hidden .card-selection-tools{display:none}.edit-guides-hidden .card-selected{outline:none}
+
+.edit-guides-hidden .edit-guides-hidden .card-selected{outline:none}
+
+.history-toolbar{flex-wrap:wrap}.history-toolbar .card-selection-tools{display:flex;align-items:center;gap:5px;border-left:1px solid #d5dff4;padding-left:8px;margin-left:4px}.history-toolbar .card-selection-tools>span{margin:0;color:#2454ef;white-space:nowrap}.history-toolbar .card-selection-help{border:1px solid #c7d2e5;border-radius:50%;width:19px;height:19px;padding:0;cursor:help}
+
+.canvas-range-selection{position:absolute;z-index:80;border:1px solid #5278ff;background:#5278ff26;pointer-events:none}.canvas-base-selected{position:absolute;z-index:40;outline:2px solid #5278ff;outline-offset:3px;pointer-events:none}.slide[data-range-enabled="true"]{touch-action:none;outline:none}.slide-item .card-handle-move,.slide-item .card-handle-select{top:-19px}
+
+.presentation-memo-panel{position:absolute;right:24px;bottom:85px;width:min(360px,calc(100vw - 48px));z-index:120;background:#fff;color:#182238;border:1px solid #dbe2ef;border-radius:12px;padding:16px;box-shadow:0 8px 32px #0003}
+.presentation-memo-panel header{display:flex;align-items:center;justify-content:space-between}
+.presentation-memo-panel p,.presentation-memo-panel small{font-size:11px;line-height:1.6;color:#64748b}
+.presentation-memo-panel textarea,.presentation-memo-editor textarea,.presenter-notes textarea{display:block;box-sizing:border-box;width:100%;min-height:130px;margin:10px 0;padding:10px;border:1px solid #cbd5e1;border-radius:6px;background:white;color:#182238;resize:vertical;font:inherit}
+.presentation-memo-editor{margin:0 18px 8px;font-size:12px;color:#475569}
+.presentation-memo-editor summary{cursor:pointer;padding:8px 0}
+.presentation-memo-editor small{font-size:11px}
+
+.overflow-badge{pointer-events:none}
+
+.card-selection-tools select{font:inherit;color:inherit;min-height:26px;padding:3px 6px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer}
+.card-selection-tools select:disabled{opacity:.45;cursor:default}
+
+.drag-guides{position:absolute;inset:0;pointer-events:none;z-index:85}
+.drag-guide{position:absolute;color:#d92b91;border-color:#ec4899;font:11px/1.3 system-ui;filter:drop-shadow(0 1px 1px #fff)}
+.drag-guide.alignment.x{top:0;bottom:0;border-left:2px dotted #ec4899}
+.drag-guide.alignment.y{left:0;right:0;border-top:2px dotted #ec4899}
+.drag-guide span{position:absolute;white-space:nowrap;background:#fff;color:#b91c78;border:1px solid #f9a8d4;border-radius:3px;padding:2px 4px}
+.drag-guide.alignment.x span{top:3px;left:4px}.drag-guide.alignment.y span{left:3px;top:4px}
+.drag-guide.distance.y{border-left:2px dotted #ec4899}.drag-guide.distance.x{border-top:2px dotted #ec4899}
+.drag-guide.distance.y span{top:50%;left:4px;transform:translateY(-50%)}.drag-guide.distance.x span{left:50%;top:4px;transform:translateX(-50%)}
+
+/* 選択メニューの出現でキャンバス寸法が変わらないようにする。 */
+.history-toolbar{height:42px;min-height:42px;flex-wrap:nowrap;align-items:center;overflow-x:auto;overflow-y:hidden}
+.history-toolbar>*{flex-shrink:0;white-space:nowrap}

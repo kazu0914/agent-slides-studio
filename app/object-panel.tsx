@@ -17,9 +17,19 @@ function LayerAction({hint,...props}:ButtonHTMLAttributes<HTMLButtonElement>&{hi
  return <><button {...props} aria-describedby={anchor?id:undefined} onMouseEnter={e=>show(e.currentTarget)} onMouseLeave={()=>setAnchor(null)} onFocus={e=>show(e.currentTarget)} onBlur={()=>setAnchor(null)}/>{anchor&&createPortal(<div id={id} role="tooltip" className="layer-action-tooltip" style={{right:anchor.right,top:anchor.top,transform:anchor.below?'none':'translateY(-100%)'}}>{hint}</div>,document.body)}</>;
 }
 export async function uploadImage(file:File):Promise<string>{if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw Error('PNG・JPEG・WebPを選んでください');if(file.size>10*1024*1024)throw Error('画像は10MBまでです');const data=await new Promise<string>((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result as string);r.onerror=reject;r.readAsDataURL(file);});const r=await fetch('/api/assets',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data})});const result=await r.json() as {src:string;error?:string};if(!r.ok)throw Error(result.error);return result.src;}
+function FontSizeInput({value,onChange}:{value:number;onChange:(value:number)=>void}){
+ const [input,setInput]=useState<string|null>(null);
+ const cancel=useRef(false);
+ const normalize=(n:number)=>Math.min(160,Math.max(6,n));
+ return <input aria-label="文字サイズ (pt)" type="text" inputMode="decimal" role="spinbutton" aria-valuemin={6} aria-valuemax={160} aria-valuenow={value} title="6〜160 pt。Enterまたは欄の外をクリックして確定" value={input??String(value)}
+  onFocus={()=>{cancel.current=false;setInput(String(value));}}
+  onChange={e=>setInput(e.target.value)}
+  onBlur={()=>{const raw=input?.trim();if(!cancel.current&&raw&&/^\d+(?:\.\d*)?$/.test(raw)){const n=Number(raw);if(Number.isFinite(n)&&normalize(n)!==value)onChange(normalize(n));}cancel.current=false;setInput(null);}}
+  onKeyDown={e=>{if(e.nativeEvent.isComposing)return;if(e.key==='Enter'){e.preventDefault();e.currentTarget.blur();}else if(e.key==='Escape'){e.preventDefault();e.stopPropagation();cancel.current=true;e.currentTarget.blur();}else if(e.key==='ArrowUp'||e.key==='ArrowDown'){e.preventDefault();const n=Number(input);setInput(String(normalize((input?.trim()&&Number.isFinite(n)?n:value)+(e.key==='ArrowUp'?1:-1))));}}}/>
+}
 export function TextStyleControls({style,onChange}:{style:TextStyle;onChange:(s:TextStyle)=>void}){return <div className="text-style-controls">
  <label>フォント<select aria-label="フォント" value={style.fontFamily||'Hiragino Sans'} onChange={e=>onChange({...style,fontFamily:e.target.value as TextStyle['fontFamily']})}>{fontFamilies.map(f=><option key={f}>{f}</option>)}</select></label>
- <div className="object-field-pair"><label>サイズ (pt)<input aria-label="文字サイズ (pt)" type="number" min="6" max="160" value={style.fontSize||32} onChange={e=>onChange({...style,fontSize:Math.min(160,Math.max(6,Number(e.target.value)))})}/></label><label>文字色<input aria-label="文字色" type="color" value={style.color||'#17233b'} onChange={e=>onChange({...style,color:e.target.value})}/></label></div>
+ <div className="object-field-pair"><label>サイズ (pt)<FontSizeInput value={style.fontSize||32} onChange={fontSize=>onChange({...style,fontSize})}/></label><label>文字色<input aria-label="文字色" type="color" value={style.color||'#17233b'} onChange={e=>onChange({...style,color:e.target.value})}/></label></div>
  <div className="object-button-row">{(['bold','italic','underline'] as const).map((key,i)=><button type="button" key={key} aria-label={['太字','斜体','下線'][i]} aria-pressed={!!style[key]} onClick={()=>onChange({...style,[key]:!style[key]})}>{['B','I','U'][i]}</button>)}{(['left','center','right'] as const).map((align,i)=><button type="button" key={align} aria-label={['左揃え','中央揃え','右揃え'][i]} aria-pressed={(style.align||'left')===align} onClick={()=>onChange({...style,align})}>{['左','中','右'][i]}</button>)}</div>
  <label>行間<input type="range" aria-label="行間" min=".8" max="3" step=".1" value={style.lineHeight||1.5} onChange={e=>onChange({...style,lineHeight:Number(e.target.value)})}/></label>
  </div>;}
