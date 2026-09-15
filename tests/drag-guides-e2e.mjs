@@ -9,5 +9,17 @@ export async function dragGuidesTest(browser,api,origin,initial){
  await p.keyboard.down('Alt');await p.mouse.move(r.x+20+96/1600*b.width,r.y+20,{steps:3});assert.equal(await canvas.locator('.drag-guide').count(),0);await p.keyboard.up('Alt');await p.mouse.move(r.x+20+98/1600*b.width,r.y+20,{steps:3});await p.mouse.up();assert.equal(await canvas.locator('.drag-guide').count(),0);
  await p.waitForFunction(()=>document.querySelector('.projectbar')?.textContent?.includes('保存済み'));const saved=await api('/api/deck?deckId='+id);assert(Math.abs(saved.deck.slides[0].objects[0].x-500)<.2);assert.equal(saved.version,before.version+1);assert.deepEqual(saved.deck.slides[0].objects[1],before.deck.slides[0].objects[1]);
  await p.getByRole('button',{name:'元に戻す'}).click();await p.waitForFunction(()=>document.querySelector('.projectbar')?.textContent?.includes('保存済み'));assert.deepEqual((await api('/api/deck?deckId='+id)).deck,before.deck);
+ // 前の移動の自動保存待ち中に次のドラッグを始め、保存周期をまたいでも位置が戻らない。
+ await p.keyboard.down('Alt');
+ let box=await el.boundingBox();await p.mouse.move(box.x+20,box.y+20);await p.mouse.down();await p.mouse.move(box.x+45,box.y+35,{steps:5});await p.mouse.up();
+ box=await el.boundingBox();await p.mouse.move(box.x+20,box.y+20);await p.mouse.down();await p.mouse.move(box.x+60,box.y+50,{steps:5});
+ const during=await el.boundingBox(),version=(await api('/api/deck?deckId='+id)).version;
+ await p.waitForTimeout(1400);
+ assert.equal((await api('/api/deck?deckId='+id)).version,version,'連続ドラッグ中に前回の自動保存が割り込まない');
+ assert(Math.abs((await el.boundingBox()).x-during.x)<1,'押したまま待っても移動位置が戻らない');
+ await p.mouse.move(box.x+80,box.y+60,{steps:5});await p.mouse.up();await p.keyboard.up('Alt');
+ await p.waitForFunction(()=>document.querySelector('.projectbar')?.textContent?.includes('保存済み'));
+ const final=await el.boundingBox();assert(Math.abs(final.x-(box.x+60))<1,'最後の移動位置を確定');
+ await p.reload();await canvas.waitFor();assert(Math.abs((await el.boundingBox()).x-final.x)<1,'連続移動の確定位置を再読込して保持');
  await p.close();console.log('PASS: direct text drag, pink alignment/distance guides, snap, Alt bypass, cleanup, one save, locked reference, Undo');
 }
