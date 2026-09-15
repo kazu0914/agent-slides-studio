@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+## 0.9.0-beta.2 — 2026-09-15
+
+- スライドのグリッド表示、選択状態の維持、閉じる操作とフォーカス復帰を追加。
+- ポータルなど別サイトのリンクから編集画面を開けない問題を修正。API・埋め込み・別Originの拒否は維持。
+- READMEに操作GIFと英語の紹介を追加。
+- リリース手順・互換性方針・更新手順を文書化。
+- 保存形式の変更なし。macOS向けベータ版で、既知の機能制限は継続。
+
 ## 0.9.0-beta.1 — 2026-09-14
 
 - Local slide library and editor with editable objects, tables, charts and animations.
