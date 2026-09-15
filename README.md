@@ -1,9 +1,11 @@
 # Agent Slides Studio
 
+Local slide editor for macOS with direct editing, animated elements, and Codex-assisted revisions. Free, open-source beta under the MIT license.
+
 ローカルで動く、AIエージェントを前提にしたスライド編集アプリです。
 ブラウザで編集し、AIの変更案を見比べて採用し、変更理由と履歴を残せます。
 
-**v0.9.0-beta.1 / macOS向け無料ベータ版。個人のローカル利用向けです。** 公開Webサービスとしての認証・複数ユーザー管理は備えていません。
+**v0.9.0-beta.2 / macOS向け無料ベータ版。個人のローカル利用向けです。** 公開Webサービスとしての認証・複数ユーザー管理は備えていません。
 
 モーションライブラリから動く装飾を追加し、スライド上で配置を調整できます。
 
@@ -149,3 +151,5 @@ AIにURLを渡すだけで必ず完了するわけではなく、権限・依存
 SVGは画像として表示され、スクリプトの実行や外部ファイルの参照には対応しません。
 位置・大きさ・回転・複製・削除は通常の要素と同様です。色・周期はSVG内で指定します。
 自作SVGの再生はSVG自身が制御するため、アプリ共通の一時停止・速度設定の対象外です。
+
+リリース方針と更新手順は [RELEASING.md](docs/RELEASING.md) を参照してください。
