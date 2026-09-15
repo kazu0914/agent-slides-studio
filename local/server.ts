@@ -256,6 +256,7 @@ createServer(async (req, res) => {
             prompt: z.string().trim().min(1).max(8000),
             model: z.string().max(100).optional(),
             effort: z.string().max(20).optional(),
+            webSearch: z.boolean().default(false),
             scope:z.object({mode:z.enum(["deck","slide","objects"]),slideId:z.string(),objectIds:z.array(z.string()).max(100)}).optional(),
             selectedSlideId: z.string(),
             version: z.number().int(),
@@ -281,7 +282,7 @@ createServer(async (req, res) => {
             current.deck,
             input.selectedSlideId,
             history,
-            {model:input.model, effort:input.effort,signal:controller.signal,scope:input.scope},
+            {model:input.model, effort:input.effort,webSearch:input.webSearch,signal:controller.signal,scope:input.scope},
           );
           let proposal = result.proposalJson
             ? proposalSchema.parse(JSON.parse(result.proposalJson))
@@ -297,6 +298,7 @@ createServer(async (req, res) => {
             .run(id, "assistant", result.answer, at);
           return json({
             answer: result.answer,
+            webSearchCount: result.webSearchCount,
             proposal,
             version: current.version,
           });

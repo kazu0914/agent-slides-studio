@@ -138,6 +138,8 @@ export function SlideView({
         ? "arrow"
         : "none");
   const slideRoot = useRef<HTMLDivElement>(null);
+  const [cardSelection,setCardSelection] = useState<number[]>([]);
+  useEffect(()=>setCardSelection([]),[slide.id,slide.items.length]);
   const [points, setPoints] = useState<[number, number][]>([]);
   const active = useRef<[number, number][] | null>(null);
   const svg = useRef<SVGSVGElement>(null);
@@ -259,13 +261,15 @@ export function SlideView({
           data-edit-element="items"
           className={`slide-items ${slide.layout === "flow" ? "flow-items" : ""}`}
         >
+          {editable&&onEdit&&<div className="card-selection-tools"><button type="button" onClick={()=>setCardSelection(slide.items.map((_,i)=>i))}>カードをすべて選択</button>{cardSelection.length>0&&<><span>{cardSelection.length}件選択中</span><button type="button" onClick={()=>setCardSelection([])}>解除</button></>}<small>Shift＋クリックで複数選択 →「移動」をドラッグ</small></div>}
           {slide.items.map((item, i) => (
             <div
-              className="slide-item"
+              className={`slide-item ${editable&&cardSelection.includes(i)?'card-selected':''}`}
+              onPointerDownCapture={e=>{if(editable&&(e.shiftKey||e.metaKey||e.ctrlKey)&&!(e.target as HTMLElement).closest('button')){e.preventDefault();e.stopPropagation();setCardSelection(ids=>ids.includes(i)?ids.filter(id=>id!==i):[...ids,i]);}}}
               key={i}
               style={{ animationDelay: `${i * 0.25 + 0.15}s`,...(item.box?{position:'absolute',left:`${item.box.x}%`,top:`${item.box.y}%`,width:`${item.box.w}%`,height:`${item.box.h}%`,boxSizing:'border-box'}:{}) }}
             >
-              {editable&&onEdit&&<CardHandles index={i} items={slide.items} onChange={items=>onEdit('items',items)} onBegin={()=>{onActivate?.();onGesture?.();}}/>}
+              {editable&&onEdit&&<CardHandles index={i} selected={cardSelection} onSelect={setCardSelection} items={slide.items} onChange={items=>onEdit('items',items)} onBegin={()=>{onActivate?.();onGesture?.();}}/>}
               <span>{pad(i + 1)}</span>
               <CanvasText
                 as="h3"
@@ -541,6 +545,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
   const [modelCatalog, setModelCatalog] = useState<{model:string;displayName:string;isDefault:boolean;defaultReasoningEffort:string;supportedReasoningEfforts:{reasoningEffort:string}[]}[]>([]);
   const [aiModel,setAiModel] = useState("");
   const [aiEffort,setAiEffort] = useState("");
+  const [webSearch,setWebSearch] = useState(false);
   const [modelError,setModelError] = useState("");
   useEffect(()=>{if(!aiAvailable||connection.state!=='ready')return;setModelError('');fetch("/api/codex/models").then(async r=>{if(!r.ok)throw Error("モデル一覧を取得できません");return r.json();}).then(result=>{
     const models=(result as {data: typeof modelCatalog}).data;setModelCatalog(models);
@@ -571,6 +576,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             prompt: text,
+            webSearch,
             scope:{mode:aiScope,slideId:slide.id,objectIds:objectSelection},
             ...(aiModel ? {model:aiModel,effort:aiEffort || undefined}:{}),
             version: work.version,
@@ -2023,7 +2029,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                 <div className="context-chip">
                   <span /> スライド {pad(selected + 1)} を編集中
                 </div>
-                <div className="codex-connection" role="status"><span>{connection.message}</span><button disabled={connection.state==='checking'||aiBusy} onClick={()=>void checkConnection()}>再確認</button><small>Web調査は未対応です。参考資料は本文を貼り付けてください。</small></div>
+                <div className="codex-connection" role="status"><span>{connection.message}</span><button disabled={connection.state==='checking'||aiBusy} onClick={()=>void checkConnection()}>再確認</button><small>{aiAvailable?"Web検索は下のチェックで有効にできます。社内資料は必要な範囲だけ共有してください。":"AI対話とWeb検索にはCodexへの接続が必要です。"}</small></div>
                 <div className="agent-mode">
                   {aiAvailable && (
                     <button
@@ -2071,7 +2077,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                         <p>{m.text}</p>
                       </div>
                     ))}
-                    {aiBusy && <div className="ai-generating" role="status" aria-live="polite"><span className="ai-generating-dot" aria-hidden="true"/><div><strong>Codexが考えています…</strong><small>変更案を作成中です</small></div></div>}
+                    {aiBusy && <div className="ai-generating" role="status" aria-live="polite"><span className="ai-generating-dot" aria-hidden="true"/><div><strong>Codexが考えています…</strong><small>{webSearch?"Web検索を許可して変更案を作成中です":"変更案を作成中です"}</small></div></div>}
                   </div>
                 ) : agentMode === "quick" ? (
                   <>
@@ -2200,6 +2206,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                 }}
               >
                 <label className="scope-control">AIが変更できる範囲<select aria-label="AI変更範囲" value={aiScope} disabled={aiBusy} onChange={e=>setAiScope(e.target.value as Scope['mode'])}><option value="deck">デッキ全体</option><option value="slide">現在のスライドに固定</option><option value="objects" disabled={!objectSelection.length}>選択した要素に固定 ({objectSelection.length})</option></select></label>
+                {agentMode==="ai"&&<label className="web-search-control"><input type="checkbox" checked={webSearch} disabled={aiBusy} onChange={e=>setWebSearch(e.target.checked)}/>Codex標準のWeb検索を使う<small>必要に応じてWebを調べ、出典を回答に残します。</small></label>}
                 {aiScope!=="deck"&&<p className="scope-hint">複数枚の作成・構成変更は「デッキ全体」を選んでください。</p>}
                 {aiBusy&&<button type="button" className="stop-generation" onClick={()=>aiAbort.current?.abort()}>生成を停止</button>}
                 <textarea

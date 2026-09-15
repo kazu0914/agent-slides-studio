@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {moveCards,toggleCard} from '../lib/card-selection';
+const items=[0,40,80].map(x=>({title:'カード',body:'本文',box:{x,y:0,w:30,h:100}}));
+const moved=moveCards(items,[0,1,2],0,-20);
+assert.deepEqual(moved.map(i=>i.box?.y),[-20,-20,-20]);
+assert.deepEqual(items.map(i=>i.box.y),[0,0,0]);
+assert.equal(moveCards(items,[0,2],10,0)[1],items[1]);
+const edge=moveCards(items,[0,1,2],500,0);
+assert.deepEqual(edge.map(i=>i.box?.x),[120,160,200]);
+assert.deepEqual(toggleCard([0,1],1),[0]);
+assert.deepEqual(toggleCard([0],2),[0,2]);
