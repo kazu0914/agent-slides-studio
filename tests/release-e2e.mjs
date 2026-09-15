@@ -1,3 +1,9 @@
+import {fontSizeTest} from './font-size-e2e.mjs';
+import {dragGuidesTest} from './drag-guides-e2e.mjs';
+import {alignmentTest} from './alignment-e2e.mjs';
+import {clipboardDeleteTest} from './clipboard-delete-e2e.mjs';
+import {presentationRecordsTest} from './presentation-records-e2e.mjs';
+import {rangeSelectionTest} from './range-selection-e2e.mjs';
 import {request as httpRequest} from 'node:http';
 import {spawn} from 'node:child_process';import {mkdtemp,symlink,rm,readFile,writeFile} from 'node:fs/promises';import {tmpdir} from 'node:os';import {join,resolve} from 'node:path';import assert from 'node:assert/strict';import {chromium} from 'playwright';import {browserOptions} from '../local/browser.mjs';
 const release=resolve(process.argv[2]||'.'),origin='http://127.0.0.1:9192';let proc,browser;const dirs=[];
@@ -60,7 +66,11 @@ await cardPage.route('**/api/codex/chat?*',route=>{if(route.request().method()==
 await cardPage.goto(origin+'/deck/'+cardId);
 const searchBox=cardPage.getByRole('checkbox',{name:'Codex標準のWeb検索を使う'});await searchBox.waitFor();assert.equal(await searchBox.isChecked(),false);await searchBox.check();assert.equal(await searchBox.isChecked(),true);await cardPage.getByRole('textbox',{name:'エージェントへの指示'}).fill('検索あり');await cardPage.getByRole('button',{name:'変更案を作成'}).click();await cardPage.waitForFunction(()=>document.querySelector('.composer textarea')?.value==='');assert.equal(requests.at(-1).webSearch,true);
 await searchBox.uncheck();await cardPage.getByRole('textbox',{name:'エージェントへの指示'}).fill('検索なし');await cardPage.getByRole('button',{name:'変更案を作成'}).click();await cardPage.waitForFunction(()=>document.querySelector('.composer textarea')?.value==='');assert.equal(requests.at(-1).webSearch,false);
-await cardPage.getByRole('button',{name:'カードをすべて選択',exact:true}).click();
+assert.equal(await cardPage.getByRole('group',{name:'カードの選択操作'}).count(),0,'未選択時は操作バーなし');
+assert.equal(await cardPage.locator('.center .slide .card-selection-tools').count(),0,'スライド内に操作バーなし');
+await cardPage.locator('.center .slide-item').first().hover();
+await cardPage.getByRole('button',{name:'カード 1 を選択',exact:true}).click();
+await cardPage.locator('.history-toolbar').getByRole('button',{name:'カードをすべて選択',exact:true}).click();
 assert.equal(await cardPage.locator('.center .card-selected').count(),3);
 const cards=cardPage.locator('.center .slide-item');const before=await cards.evaluateAll(es=>es.map(e=>e.getBoundingClientRect().y));
 const handle=cardPage.getByRole('button',{name:'カード 1 を移動',exact:true});const hb=await handle.boundingBox();assert(hb);
@@ -74,6 +84,7 @@ assert.equal(await cardPage.locator('.center .card-selected').count(),3,'保存�
 await cardPage.getByRole('button',{name:'元に戻す'}).click();await cardPage.waitForFunction(()=>document.querySelector('.projectbar')?.textContent?.includes('保存済み'));
 assert((await api('/api/deck?deckId='+cardId)).deck.slides[0].items.every(i=>!i.box),'一度のUndoで戻る');
 await cardPage.getByRole('button',{name:'解除',exact:true}).click();
+assert.equal(await cardPage.getByRole('group',{name:'カードの選択操作'}).count(),0,'解除後は操作バーなし');
 await cards.nth(0).click({modifiers:['Shift'],position:{x:8,y:8}});await cards.nth(2).click({modifiers:['Shift'],position:{x:8,y:8}});assert.equal(await cardPage.locator('.center .card-selected').count(),2);
 await handle.focus();await handle.press('ArrowUp');await cardPage.waitForFunction(()=>document.querySelector('.projectbar')?.textContent?.includes('保存済み'));
 const keyed=(await api('/api/deck?deckId='+cardId)).deck.slides[0].items;assert(keyed[0].box.y<keyed[1].box.y&&keyed[2].box.y<keyed[1].box.y,'選択カードだけ矢印キー移動');
@@ -105,4 +116,10 @@ const conflict=await fetch(origin+'/api/deck?deckId='+tutorialId,{method:'POST',
 assert.equal(conflict.status,409);assert.equal((await api('/api/deck?deckId='+tutorialId)).deck.slides[0].title,'新しい版を保持');
 await p.reload();await title.waitFor();assert.equal(await title.innerText(),'新しい版を保持');
 console.log('PASS: failed autosave/retry, save-before-present, stale version rejected, reload');
+await rangeSelectionTest(browser,api,origin,initial);
+await presentationRecordsTest(browser,api,origin,initial);
+await clipboardDeleteTest(browser,api,origin,initial);
+await alignmentTest(browser,api,origin,initial);
+await dragGuidesTest(browser,api,origin,initial);
+await fontSizeTest(browser,api,origin,initial);
 console.log('PASS: sample download/import, browser text editing/save, presentation');console.log('PASS: clean startup, no private backgrounds, Codex absent/manual edit, save/restart, trash restore, empty-workspace backup restore incl images/history/chat, PDF/PPTX');}finally{await browser?.close();await stop();for(const d of dirs)await rm(d,{recursive:true,force:true});}
