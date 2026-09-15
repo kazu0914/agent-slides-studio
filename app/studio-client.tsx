@@ -2,6 +2,7 @@
 import CardHandles from "./card-handles";
 import BrandLogo from "./brand-logo";
 import SlideGrid from "./slide-grid";
+import SortableSlides from "./sortable-slides";
 import {useBackgrounds,backgroundLabels,defaultBackground} from "./use-backgrounds";
 import {FreeObjects,textCss} from "./free-objects";
 import {ObjectPanel,TextStyleControls,uploadImage} from "./object-panel";
@@ -22,6 +23,7 @@ import {
   Sparkles,
   History,
   PanelLeft,
+  PanelRight,
   LayoutGrid,
   Lock,
   MousePointer2,
@@ -438,6 +440,11 @@ export function SlideThumbnail({slide,index,total}:{slide:Slide;index:number;tot
 }
 export default function Home({ deckId = "legacy" }: { deckId?: string }) {
   const [slidesCollapsed,setSlidesCollapsed]=useState(false);
+  const [rightCollapsed,setRightCollapsed]=useState(false);
+  const rightCloseButton=useRef<HTMLButtonElement>(null),rightOpenButton=useRef<HTMLButtonElement>(null);
+  const rightTogglePending=useRef(false);
+  useEffect(()=>{if(rightTogglePending.current){(rightCollapsed?rightOpenButton:rightCloseButton).current?.focus();rightTogglePending.current=false;}},[rightCollapsed]);
+  function toggleRightPanel(collapsed:boolean){rightTogglePending.current=true;setRightCollapsed(collapsed);}
   const [gridOpen,setGridOpen]=useState(false);
   const backgrounds=useBackgrounds();
   const [panelWidths, setPanelWidths] = useState({ left: 226, right: 302 });
@@ -1223,6 +1230,17 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
       .then(() => setSelected(selected + 1))
       .catch(() => {});
   }
+  function reorderSlide(id:string,slot:number){
+    if(locked)return;
+    const next=structuredClone(workRef.current.deck),from=next.slides.findIndex(s=>s.id===id);
+    if(from<0)return;
+    const dest=Math.max(0,Math.min(next.slides.length-1,slot>from?slot-1:slot));
+    if(from===dest)return;
+    const [moved]=next.slides.splice(from,1);next.slides.splice(dest,0,moved);
+    void commit(next,`スライドを${from+1}枚目から${dest+1}枚目へ移動`).catch(()=>{});
+    setSelected(dest);
+    requestAnimationFrame(()=>document.querySelector<HTMLButtonElement>(`[data-slide-id="${CSS.escape(id)}"]`)?.focus({preventScroll:true}));
+  }
   function move(delta: number) {
     const next = structuredClone(work.deck);
     const dest = selected + delta;
@@ -1621,7 +1639,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
         </div>
       )}
       <div
-        className={`workspace ${slidesCollapsed ? "slides-collapsed" : ""}`}
+        className={`workspace ${slidesCollapsed ? "slides-collapsed" : ""} ${rightCollapsed ? "right-collapsed" : ""}`}
         style={
           {
             "--left-panel-width": `${panelWidths.left}px`,
@@ -1661,10 +1679,12 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
               <Plus size={16} />
             </button>
           </div>
-          <div className="thumb-list">
+          <SortableSlides ids={work.deck.slides.map(s=>s.id)} disabled={locked} onReorder={reorderSlide}>
             {work.deck.slides.map((s, i) => (
               <button
                 key={s.id}
+                data-slide-id={s.id}
+                title="ドラッグで並べ替え・Alt＋上下キーで移動"
                 className={`thumb-row ${selected === i ? "selected" : ""}`}
                 onClick={() => {
                   setSelected(i);
@@ -1678,7 +1698,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
 
               </button>
             ))}
-          </div>
+          </SortableSlides>
           <button
             className="add-slide"
             disabled={locked || work.deck.slides.length >= 50}
@@ -1966,13 +1986,15 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
             </span>
           </footer>
         </main>
-        <aside className="right-panel">
+        {rightCollapsed&&<div className="right-panel-rail"><button ref={rightOpenButton} type="button" aria-label="右メニューを開く" title="右メニューを開く" aria-expanded={false} aria-controls="right-panel" onClick={()=>toggleRightPanel(false)}><PanelRight size={17}/></button></div>}
+        <aside className="right-panel" id="right-panel" hidden={rightCollapsed}>
           <PanelResize
             side="right"
             width={panelWidths.right}
             onResize={(w) => resizePanel("right", w)}
           />
           <div className="panel-tabs">
+            <button ref={rightCloseButton} type="button" className="right-panel-toggle" aria-label="右メニューを閉じる" title="右メニューを閉じる" aria-expanded={!rightCollapsed} aria-controls="right-panel" onClick={()=>toggleRightPanel(true)}><PanelRight size={16}/></button>
             <button
               className={tab === "agent" ? "selected" : ""}
               onClick={() => setTab("agent")}
