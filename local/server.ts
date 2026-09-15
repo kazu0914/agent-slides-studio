@@ -91,8 +91,6 @@ createServer(async (req, res) => {
   res.setHeader("Referrer-Policy", "no-referrer");
   res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
   try {
-    if (req.headers['sec-fetch-site'] === 'cross-site')
-      throw new AppError("別サイトからの操作は受け付けません。", 403);
     if (
       req.headers.host !== `127.0.0.1:${port}` &&
       req.headers.host !== `localhost:${port}`
@@ -103,6 +101,13 @@ createServer(async (req, res) => {
       throw new AppError("別サイトからの操作は受け付けません。", 403);
     const url = new URL(req.url || "/", origin),
       id = url.searchParams.get("deckId") || "legacy";
+    // 外部リンクからの画面表示だけ許可し、API・埋め込み・送信は拒否する。
+    const pageNavigation = req.method === "GET" &&
+      req.headers["sec-fetch-mode"] === "navigate" &&
+      req.headers["sec-fetch-dest"] === "document" &&
+      (url.pathname === "/" || /^\/deck\/[^/]+$/.test(url.pathname));
+    if (req.headers["sec-fetch-site"] === "cross-site" && !pageNavigation)
+      throw new AppError("別サイトからの操作は受け付けません。", 403);
     const deleted = () =>
       !!sqlite
         .prepare("SELECT 1 FROM deleted_decks WHERE owner=? AND deck_id=?")
