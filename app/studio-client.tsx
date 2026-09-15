@@ -1195,8 +1195,9 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
     const compositionStart=()=>{composingText.current=true;};const compositionEnd=()=>{composingText.current=false;};
     document.addEventListener('compositionstart',compositionStart);document.addEventListener('compositionend',compositionEnd);
     window.addEventListener('blur',compositionEnd);
-    window.addEventListener('pointerdown',begin);window.addEventListener('pointerup',end);window.addEventListener('pointercancel',end);window.addEventListener('blur',end);
-    return()=>{document.removeEventListener('compositionstart',compositionStart);document.removeEventListener('compositionend',compositionEnd);window.removeEventListener('blur',compositionEnd);window.removeEventListener('pointerdown',begin);window.removeEventListener('pointerup',end);window.removeEventListener('pointercancel',end);window.removeEventListener('blur',end);};
+    // 子要素が伝播を止めるドラッグも先に検知し、自動保存による操作解除を防ぐ。
+    window.addEventListener('pointerdown',begin,true);window.addEventListener('pointerup',end,true);window.addEventListener('pointercancel',end,true);window.addEventListener('blur',end);
+    return()=>{document.removeEventListener('compositionstart',compositionStart);document.removeEventListener('compositionend',compositionEnd);window.removeEventListener('blur',compositionEnd);window.removeEventListener('pointerdown',begin,true);window.removeEventListener('pointerup',end,true);window.removeEventListener('pointercancel',end,true);window.removeEventListener('blur',end);};
   },[]);
   useEffect(()=>{
     if(locked||autosaveError||draftError.startsWith("同じ箇所")||present||!Object.keys(drafts).length)return;
