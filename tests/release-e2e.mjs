@@ -50,6 +50,38 @@ for(const [bg,label] of [['public-blue','ブルーウェーブ'],['public-green'
  assert.equal((await fetch(origin+'/backgrounds/'+bg+'.png')).status,200);
 }
 console.log('PASS: five public backgrounds selected/rendered/persisted');
+const cardDeck={...initial,title:'カード複数選択テスト',slides:[{...initial.slides[0],layout:'flow',theme:'dark',backgroundTemplate:'none',artworkKind:'none',animation:'none',items:[0,1,2].map(i=>({title:'項目 '+(i+1),body:'複数選択の確認'})),objects:[]}]};
+const cardId=(await api('/api/decks',cardDeck)).id;
+const cardPage=await browser.newPage({viewport:{width:1500,height:1000}});
+await cardPage.route('**/api/codex/status',route=>route.fulfill({json:{available:true,state:'ready',message:'テスト接続'}}));
+await cardPage.route('**/api/codex/models',route=>route.fulfill({json:{data:[{model:'mock',displayName:'Mock',isDefault:true,defaultReasoningEffort:'low',supportedReasoningEfforts:[{reasoningEffort:'low'}]}]}}));
+const requests=[];
+await cardPage.route('**/api/codex/chat?*',route=>{if(route.request().method()==='POST'){requests.push(route.request().postDataJSON());return route.fulfill({json:{answer:'テスト応答',proposal:null,version:0}});}return route.continue();});
+await cardPage.goto(origin+'/deck/'+cardId);
+const searchBox=cardPage.getByRole('checkbox',{name:'Codex標準のWeb検索を使う'});await searchBox.waitFor();assert.equal(await searchBox.isChecked(),false);await searchBox.check();assert.equal(await searchBox.isChecked(),true);await cardPage.getByRole('textbox',{name:'エージェントへの指示'}).fill('検索あり');await cardPage.getByRole('button',{name:'変更案を作成'}).click();await cardPage.waitForFunction(()=>document.querySelector('.composer textarea')?.value==='');assert.equal(requests.at(-1).webSearch,true);
+await searchBox.uncheck();await cardPage.getByRole('textbox',{name:'エージェントへの指示'}).fill('検索なし');await cardPage.getByRole('button',{name:'変更案を作成'}).click();await cardPage.waitForFunction(()=>document.querySelector('.composer textarea')?.value==='');assert.equal(requests.at(-1).webSearch,false);
+await cardPage.getByRole('button',{name:'カードをすべて選択',exact:true}).click();
+assert.equal(await cardPage.locator('.center .card-selected').count(),3);
+const cards=cardPage.locator('.center .slide-item');const before=await cards.evaluateAll(es=>es.map(e=>e.getBoundingClientRect().y));
+const handle=cardPage.getByRole('button',{name:'カード 1 を移動',exact:true});const hb=await handle.boundingBox();assert(hb);
+await cardPage.mouse.move(hb.x+hb.width/2,hb.y+hb.height/2);await cardPage.mouse.down();await cardPage.mouse.move(hb.x+hb.width/2,hb.y+hb.height/2-35,{steps:8});await cardPage.mouse.up();
+await cardPage.waitForFunction(()=>document.querySelector('.projectbar')?.textContent?.includes('保存済み'));
+const after=await cards.evaluateAll(es=>es.map(e=>e.getBoundingClientRect().y));
+if(process.env.FRAME_UI_SCREENSHOT)await cardPage.screenshot({path:process.env.FRAME_UI_SCREENSHOT,fullPage:true});
+for(let i=0;i<3;i++)assert(Math.abs(after[i]-before[i]+35)<2,'3つのカードが同じ距離だけ上に移動');
+const stored=(await api('/api/deck?deckId='+cardId)).deck.slides[0].items;assert(stored.every(i=>i.box.y<0));
+assert.equal(await cardPage.locator('.center .card-selected').count(),3,'保存後も選択を維持');
+await cardPage.getByRole('button',{name:'元に戻す'}).click();await cardPage.waitForFunction(()=>document.querySelector('.projectbar')?.textContent?.includes('保存済み'));
+assert((await api('/api/deck?deckId='+cardId)).deck.slides[0].items.every(i=>!i.box),'一度のUndoで戻る');
+await cardPage.getByRole('button',{name:'解除',exact:true}).click();
+await cards.nth(0).click({modifiers:['Shift'],position:{x:8,y:8}});await cards.nth(2).click({modifiers:['Shift'],position:{x:8,y:8}});assert.equal(await cardPage.locator('.center .card-selected').count(),2);
+await handle.focus();await handle.press('ArrowUp');await cardPage.waitForFunction(()=>document.querySelector('.projectbar')?.textContent?.includes('保存済み'));
+const keyed=(await api('/api/deck?deckId='+cardId)).deck.slides[0].items;assert(keyed[0].box.y<keyed[1].box.y&&keyed[2].box.y<keyed[1].box.y,'選択カードだけ矢印キー移動');
+await cardPage.reload();await cards.first().waitFor();
+assert.deepEqual((await api('/api/deck?deckId='+cardId)).deck.slides[0].items,keyed);
+if(process.env.FRAME_UI_SCREENSHOT)await cardPage.screenshot({path:process.env.FRAME_UI_SCREENSHOT,fullPage:true});
+await cardPage.close();console.log('PASS: web-search checkbox opt-in, card multi-drag/save/Undo/Shift selection/keyboard/reload');
+
 const title=p.locator('.center .hero-copy h2');
 let rejectNext=true;
 await p.route('**/api/deck?deckId='+tutorialId,async route=>{
