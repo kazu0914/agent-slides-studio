@@ -973,7 +973,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
       if(document.querySelector('[aria-modal="true"]:not(.presentation)'))return;
       if (
         (e.target as HTMLElement).closest(
-          "input,textarea,select,[data-free-object],[contenteditable=true],[contenteditable=plaintext-only]",
+          present ? "input,textarea,select,[contenteditable=true],[contenteditable=plaintext-only]" : "input,textarea,select,[data-free-object],[contenteditable=true],[contenteditable=plaintext-only]",
         )
       )
         return;
