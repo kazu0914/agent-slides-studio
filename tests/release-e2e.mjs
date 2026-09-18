@@ -1,3 +1,4 @@
+import {linksTest} from './links-e2e.mjs';
 import {fontSizeTest} from './font-size-e2e.mjs';
 import {dragGuidesTest} from './drag-guides-e2e.mjs';
 import {alignmentTest} from './alignment-e2e.mjs';
@@ -122,4 +123,5 @@ await clipboardDeleteTest(browser,api,origin,initial);
 await alignmentTest(browser,api,origin,initial);
 await dragGuidesTest(browser,api,origin,initial);
 await fontSizeTest(browser,api,origin,initial);
+await linksTest(browser,api,origin,initial);
 console.log('PASS: sample download/import, browser text editing/save, presentation');console.log('PASS: clean startup, no private backgrounds, Codex absent/manual edit, save/restart, trash restore, empty-workspace backup restore incl images/history/chat, PDF/PPTX');}finally{await browser?.close();await stop();for(const d of dirs)await rm(d,{recursive:true,force:true});}

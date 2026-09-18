@@ -1,6 +1,6 @@
 'use client';
 import {useRef,useState,useLayoutEffect,type CSSProperties} from 'react';
-import {type SlideObject,type TextStyle} from '@/lib/objects';
+import {type SlideObject,type TextStyle,safeLink} from '@/lib/objects';
 import {ImportedChart} from './imported-chart';
 import {MotionArt} from './motion-art';
 export function textCss(s:TextStyle={}):CSSProperties{return {fontFamily:s.fontFamily,fontSize:s.fontSize?`${s.fontSize/12}cqw`:undefined,fontWeight:s.bold===undefined?undefined:s.bold?700:400,fontStyle:s.italic?'italic':undefined,textDecoration:s.underline?'underline':undefined,color:s.color,textAlign:s.align,lineHeight:s.lineHeight};}
@@ -17,13 +17,13 @@ export function ObjectChart({object:o}:{object:SlideObject}){
  </>}
  </svg>;
 }
-function ObjectBody({object:o,editing,inspect=false,onText}:{object:SlideObject;editing:boolean;inspect?:boolean;onText:(text:string)=>void}){
+function ObjectBody({object:o,editing,inspect=false,linksActive=false,onText}:{object:SlideObject;editing:boolean;inspect?:boolean;linksActive?:boolean;onText:(text:string)=>void}){
  const ref=useRef<HTMLDivElement>(null);const [overflow,setOverflow]=useState(false);
  // 編集モードへの切り替え時に入力先も移し、Deleteが要素削除に流れないようにする。
  useLayoutEffect(()=>{if(editing)ref.current?.querySelector<HTMLElement>('[data-object-text]')?.focus();},[editing]);
  useLayoutEffect(()=>{const el=ref.current;if(!el)return;if(o.kind!=='text'&&o.kind!=='table'){setOverflow(false);return;}const measure=()=>setOverflow(el.scrollHeight>el.clientHeight+2||el.scrollWidth>el.clientWidth+2);measure();const ro=new ResizeObserver(measure);ro.observe(el);return()=>ro.disconnect();},[o]);
  return <div ref={ref} data-text-overflow={overflow?"true":undefined} className={`free-object-body ${overflow&&inspect?'text-overflow':''}`} style={{...textCss(o.style),width:'100%',height:'100%',overflow:'hidden',...(o.kind==='text'?{display:'flex',flexDirection:'column',justifyContent:o.verticalAlign==='center'?'center':o.verticalAlign==='bottom'?'flex-end':'flex-start'}:{})}}>
- {o.kind==='text'&&<div data-object-text contentEditable={editing?'plaintext-only':false} suppressContentEditableWarning style={{width:'100%',flexShrink:0,whiteSpace:'pre-wrap',outline:0}} onBlur={e=>onText(e.currentTarget.innerText)} onKeyDown={e=>e.stopPropagation()}>{o.text}</div>}
+ {o.kind==='text'&&<div data-object-text contentEditable={editing?'plaintext-only':false} suppressContentEditableWarning style={{width:'100%',flexShrink:0,whiteSpace:'pre-wrap',outline:0}} onBlur={e=>onText(e.currentTarget.innerText)} onKeyDown={e=>{if(editing)e.stopPropagation();}}>{o.href&&safeLink(o.href)&&!editing?<a href={o.href} target="_blank" rel="noopener noreferrer" style={{color:'inherit',textDecoration:'underline',pointerEvents:linksActive?'auto':'none'}} tabIndex={linksActive?0:-1} onPointerDown={e=>{if(linksActive)e.stopPropagation();}} onClick={e=>{e.stopPropagation();if(!linksActive)e.preventDefault();}}>{o.text}</a>:o.text}</div>}
  {o.kind==='image'&&<img alt={o.name} draggable={false} src={o.src} style={{width:'100%',height:'100%',objectFit:o.fit,objectPosition:`${o.cropX}% ${o.cropY}%`}}/>}
  {o.kind==='shape'&&<svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style={{overflow:'visible'}}><g fillOpacity={o.fillOpacity ?? 1} strokeWidth={o.strokeWidth===undefined?1:o.strokeWidth/Math.max(o.w,o.h)*100}>{o.shape==='ellipse'?<ellipse cx="50" cy="50" rx="48" ry="48" fill={o.fill} stroke={o.stroke}/>:o.shape==='line'?<line x1="0" y1="50" x2="100" y2="50" strokeWidth={o.strokeWidth===undefined?2:o.strokeWidth/o.h*100} stroke={o.stroke}/>:o.shape==='arrow'?<path d="M0 35H65V10L100 50 65 90V65H0Z" fill={o.fill} stroke={o.stroke}/>:<rect x="1" y="1" width="98" height="98" rx="0" fill={o.fill} stroke={o.stroke}/>}</g></svg>}
  {o.kind==='table'&&<table className="object-table" style={{fontSize:o.style.fontSize?`${o.style.fontSize/12}cqw`:'1.4cqw'}}><tbody>{o.cells.map((row,i)=><tr key={i}>{row.map((v,j)=><td key={j} style={i===0?{background:o.fill,fontWeight:700}:undefined}>{v}</td>)}</tr>)}</tbody></table>}
@@ -33,7 +33,7 @@ function ObjectBody({object:o,editing,inspect=false,onText}:{object:SlideObject;
  {overflow&&inspect&&<span className="overflow-badge">文字が枠を超えています</span>}
  </div>;
 }
-export function FreeObjects({objects,editable=false,selected=[],onSelect,onChange,onBegin}:{objects:SlideObject[];editable?:boolean;selected?:string[];onSelect?:(ids:string[])=>void;onChange?:(objects:SlideObject[])=>void;onBegin?:()=>void}){
+export function FreeObjects({objects,editable=false,linksActive=false,selected=[],onSelect,onChange,onBegin}:{objects:SlideObject[];editable?:boolean;linksActive?:boolean;selected?:string[];onSelect?:(ids:string[])=>void;onChange?:(objects:SlideObject[])=>void;onBegin?:()=>void}){
  const root=useRef<HTMLDivElement>(null);const drag=useRef<{x:number;y:number;objects:SlideObject[];ids:string[];scale:number;resize:boolean;id:string}|null>(null);const [textId,setTextId]=useState('');const [guide,setGuide]=useState<{x?:number;y?:number}>({});
  const update=(id:string,patch:Partial<SlideObject>)=>onChange?.(objects.map(o=>o.id===id?{...o,...patch}:o));
  return <div ref={root} className="free-objects" style={{pointerEvents:'none'}}>
@@ -44,7 +44,7 @@ export function FreeObjects({objects,editable=false,selected=[],onSelect,onChang
  onPointerUp={e=>{drag.current=null;setGuide({});if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);}}
  onPointerCancel={()=>{drag.current=null;setGuide({});}}
  onKeyDown={e=>{if(!editable||textId===o.id)return;if(['Delete','Backspace','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();e.stopPropagation();onBegin?.();const ids=selected.includes(o.id)?selected:[o.id];if(e.key==='Delete'||e.key==='Backspace'){onChange?.(objects.filter(x=>!ids.includes(x.id)||x.locked));return;}onChange?.(objects.map(x=>ids.includes(x.id)&&!x.locked?{...x,x:Math.max(-1600,Math.min(3200,x.x+(e.key==='ArrowRight'?1:e.key==='ArrowLeft'?-1:0)*(e.shiftKey?10:1))),y:Math.max(-900,Math.min(1800,x.y+(e.key==='ArrowDown'?1:e.key==='ArrowUp'?-1:0)*(e.shiftKey?10:1)))}:x));}}}>
- <ObjectBody object={o} inspect={editable} editing={editable&&textId===o.id&&!o.locked} onText={text=>{update(o.id,{text});setTextId('');}}/>
+ <ObjectBody linksActive={linksActive} object={o} inspect={editable} editing={editable&&textId===o.id&&!o.locked} onText={text=>{update(o.id,{text});setTextId('');}}/>
  {editable&&selected.includes(o.id)&&<><span className="object-name">{o.name}{o.locked?' 🔒':''}</span>{!o.locked&&<span data-object-resize="true" className="object-resize" aria-label="要素のサイズ変更"/>}</>}
  </div>)}
  {guide.x!==undefined&&<div className="snap-guide vertical" style={{left:`${guide.x/16}%`}}/>}{guide.y!==undefined&&<div className="snap-guide horizontal" style={{top:`${guide.y/9}%`}}/>}

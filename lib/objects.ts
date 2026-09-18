@@ -10,10 +10,12 @@ export const chartFormatSchema=z.object({
  categoryStyle:textStyleSchema.optional(),axisStyle:textStyleSchema.optional(),labelStyle:textStyleSchema.optional(),
  gridColor:z.string().regex(/^#[0-9a-fA-F]{6}$/).optional()
 });
+export function safeLink(value:string){try{const u=new URL(value);return ['https:','http:','mailto:'].includes(u.protocol)&&!u.username&&!u.password&&!/[\u0000-\u0020]/.test(value);}catch{return false;}}
 export const objectSchema=z.object({
  id:z.string().min(1).max(80).regex(/^[a-zA-Z0-9_-]+$/),name:z.string().max(100),kind:z.enum(['text','image','shape','table','chart','motion']),
  x:z.number().min(-1600).max(3200),y:z.number().min(-900).max(1800),w:z.number().min(1).max(3200),h:z.number().min(1).max(1800),
  rotation:z.number().min(-360).max(360).default(0),opacity:z.number().min(0).max(1).default(1),locked:z.boolean().default(false),hidden:z.boolean().default(false),groupId:z.string().max(80).optional(),
+ href:z.string().max(2048).refine(safeLink,'https:// で始まるURLを入力してください').optional(),
  customSvg:z.string().max(100000).optional(),
  appearAt:z.number().int().min(0).max(100).optional(),
  fillOpacity:z.number().min(0).max(1).optional(),strokeWidth:z.number().min(0).max(100).optional(),verticalAlign:z.enum(['top','center','bottom']).optional(),

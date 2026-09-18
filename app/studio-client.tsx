@@ -351,7 +351,7 @@ export function SlideView({
           onBegin={() => onGesture?.()}
         />
       )}
-      <FreeObjects objects={(slide.objects||[]).filter(o=>(o.appearAt||0)<=revealStep)} editable={(editing || editable) && !marker && !!onObjects} selected={objectSelection} onSelect={onObjectSelection} onChange={onObjects} onBegin={onGesture}/>
+      <FreeObjects linksActive={!editing&&!editable&&!marker} objects={(slide.objects||[]).filter(o=>(o.appearAt||0)<=revealStep)} editable={(editing || editable) && !marker && !!onObjects} selected={objectSelection} onSelect={onObjectSelection} onChange={onObjects} onBegin={onGesture}/>
       {!marker&&baseSelection.map(key=><BaseSelectionOutline key={key} host={slideRoot} elementKey={key} slide={slide}/>)}
       {rangeSelection.range&&<div className="canvas-range-selection" data-testid="range-selection" style={{left:`${rangeSelection.range.x}%`,top:`${rangeSelection.range.y}%`,width:`${rangeSelection.range.w}%`,height:`${rangeSelection.range.h}%`}}/>}
       <svg
