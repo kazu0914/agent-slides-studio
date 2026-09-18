@@ -21,7 +21,7 @@ export const slideSchema = z.object({
   animation: z.enum(["orbit", "reveal", "none"]),
   artworkKind: z.enum(["holo-cards",'holo-database','holo-server','holo-target','holo-funnel','holo-pyramid','holo-solar','holo-gears','holo-platform','holo-honeycomb','holo-equalizer','holo-prism','holo-chart','holo-network','holo-flow','holo-grid','holo-document','holo-shield','holo-cloud','holo-compare','holo-timeline', "orbit", "arrow", "none", "cube", "globe", "rings", "helix", "crystal", "wave", "particles", "pulse", "bars"]).optional(),
   revealSteps:z.object({title:z.number().int().min(0).max(100).optional(),body:z.number().int().min(0).max(100).optional(),eyebrow:z.number().int().min(0).max(100).optional(),items:z.number().int().min(0).max(100).optional(),artwork:z.number().int().min(0).max(100).optional()}).optional(),
-  notes: z.string().max(4000),
+  notes: z.string().max(20000),
   objects: z.array(objectSchema).max(100).optional(),
   textStyles: z.object({title:textStyleSchema.optional(),body:textStyleSchema.optional(),eyebrow:textStyleSchema.optional(),items:textStyleSchema.optional()}).optional(),
   placements: z

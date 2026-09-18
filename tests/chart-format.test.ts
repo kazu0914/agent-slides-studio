@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {chartNumber} from '../app/imported-chart';
+import {objectSchema,makeObject} from '../lib/objects';
+assert.equal(chartNumber(.6,'0.000'),'0.600');
+assert.equal(chartNumber(.2+.4,'0.000'),'0.600');
+assert.equal(chartNumber(.472,'0.000'),'0.472');
+assert.equal(chartNumber(.222,'0.0%'),'22.2%');
+assert.equal(chartNumber(-1234.5,'#,##0.00'),'-1,234.50');
+assert.equal(chartNumber(0,'0.000'),'0.000');
+const legacy=makeObject('chart');assert.equal(legacy.chartFormat,undefined);
+const saved=objectSchema.parse(JSON.parse(JSON.stringify({...legacy,chartFormat:{colors:['#087FBE'],showLegend:false,showValue:true,minimum:0,maximum:.6,majorUnit:.2,valueFormat:'0.000'}})));
+assert.equal(saved.chartFormat?.showLegend,false);assert.equal(saved.chartFormat?.valueFormat,'0.000');
+assert.throws(()=>objectSchema.parse({...legacy,chartFormat:{majorUnit:0}}));
+assert.throws(()=>objectSchema.parse({...legacy,chartFormat:{colors:['url(untrusted)']}}));
+console.log('Chart decimals, percentages, legacy compatibility and saved formatting PASS');

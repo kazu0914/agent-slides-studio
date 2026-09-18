@@ -2616,7 +2616,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                 スピーカーノート
                 <textarea
                   value={draft.notes}
-                  maxLength={4000}
+                  maxLength={20000}
                   rows={3}
                   onChange={(e) => changeDraft("notes", e.target.value)}
                 />

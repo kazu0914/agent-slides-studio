@@ -1,10 +1,12 @@
 'use client';
 import {useRef,useState,useLayoutEffect,type CSSProperties} from 'react';
 import {type SlideObject,type TextStyle} from '@/lib/objects';
+import {ImportedChart} from './imported-chart';
 import {MotionArt} from './motion-art';
 export function textCss(s:TextStyle={}):CSSProperties{return {fontFamily:s.fontFamily,fontSize:s.fontSize?`${s.fontSize/12}cqw`:undefined,fontWeight:s.bold===undefined?undefined:s.bold?700:400,fontStyle:s.italic?'italic':undefined,textDecoration:s.underline?'underline':undefined,color:s.color,textAlign:s.align,lineHeight:s.lineHeight};}
 export const chartColors=['#2454ef','#13a89e','#ef8244','#b26de3','#e0507a','#71819a'];
 export function ObjectChart({object:o}:{object:SlideObject}){
+ if(o.chartFormat&&o.chartType!=='pie')return <ImportedChart object={o}/>;
  const rows=o.cells.slice(1),series=o.cells[0]?.slice(1)||[],values=rows.map(r=>r.slice(1).map(Number));const flat=values.flat();const max=Math.max(0,...flat),min=Math.min(0,...flat),range=max-min||1;
  const y=(n:number)=>270-(n-min)/range*230,base=y(0),cw=440/Math.max(rows.length,1);const total=values.reduce((sum,r)=>sum+Math.max(0,r[0]||0),0);let angle=-Math.PI/2;
  return <svg viewBox="0 0 560 350" width="100%" height="100%" role="img" aria-label={`${o.chartType} グラフ`}>

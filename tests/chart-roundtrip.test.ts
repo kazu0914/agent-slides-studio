@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {DOMParser} from '@xmldom/xmldom';
+import {unzipSync,strFromU8} from 'fflate';
+import {objectSchema} from '../lib/objects';
+import {ImportedChart} from '../app/imported-chart';
+import {chartOptions} from '../local/chart-options.mjs';
+import {importPptx} from '../local/pptx-import';
+// 公開テストには個人の資料を含めず、同じ書式の最小グラフで往復を検証する。
+const require=createRequire(process.cwd()+'/package.json');
+const React=require('react');
+const {renderToStaticMarkup}=require('react-dom/server');
+const PptxGenJS=require('pptxgenjs');
+const object=objectSchema.parse({id:'chart-roundtrip',name:'Chart',kind:'chart',x:116.67,y:250,w:1333.33,h:425,cells:[['項目','秒'],['接続A','0.472'],['接続B','0.222']],chartFormat:{colors:['#087FBE'],showLegend:false,showValue:true,minimum:0,maximum:.6,majorUnit:.2,numberFormat:'0.000',valueFormat:'0.000',gapWidth:100,categoryStyle:{fontFamily:'Noto Sans JP',fontSize:18.125,color:'#263747'},axisStyle:{fontFamily:'Noto Sans JP',fontSize:16.875,color:'#526575'},labelStyle:{fontFamily:'Noto Sans JP',fontSize:18.125,bold:true,color:'#263747'},gridColor:'#E2EAF0'}});
+const svg=renderToStaticMarkup(React.createElement(ImportedChart,{object}));
+const doc=new DOMParser().parseFromString(svg,'image/svg+xml');
+assert.equal(doc.documentElement?.getAttribute('viewBox'),'0 0 1333.33 425');
+const labels=Array.from(doc.getElementsByTagName('text')).map(t=>t.textContent);
+assert.deepEqual(labels,['0.000','0.200','0.400','0.600','0.472','0.222','接続A','接続B']);
+const bars=Array.from(doc.getElementsByTagName('rect'));
+assert.equal(bars.length,2);assert(bars.every(b=>b.getAttribute('fill')==='#087FBE'));
+assert(Math.abs(Number(bars[0].getAttribute('height'))/Number(bars[1].getAttribute('height'))-.472/.222)<1e-10);
+assert(Number(bars[0].getAttribute('width'))>300);
+const pptx=new PptxGenJS();pptx.defineLayout({name:'STUDIO',width:1600/96,height:900/96});pptx.layout='STUDIO';
+pptx.addSlide().addChart('bar',[{name:'秒',labels:['接続A','接続B'],values:[.472,.222]}],{x:object.x/96,y:object.y/96,w:object.w/96,h:object.h/96,...chartOptions(object.chartFormat)});
+const buffer=await pptx.write({outputType:'nodebuffer'});
+const xml=strFromU8(unzipSync(buffer)['ppt/charts/chart1.xml']);
+assert(xml.includes('<c:max val="0.6"'));assert(xml.includes('<c:majorUnit val="0.2"'));assert(!xml.includes('<c:legend>'));
+const roundtrip=importPptx(buffer,'roundtrip.pptx',()=>{throw Error('画像への変換は不要');}).deck.slides[0].objects!.find(o=>o.kind==='chart')!;
+assert(roundtrip);assert.deepEqual(roundtrip.cells,object.cells);
+for(const key of ['colors','showLegend','showValue','minimum','maximum','majorUnit','numberFormat','valueFormat','gapWidth','gridColor'] as const)assert.deepEqual(roundtrip.chartFormat?.[key],object.chartFormat?.[key],key);
+for(const key of ['categoryStyle','axisStyle','labelStyle'] as const){const actual=roundtrip.chartFormat![key]!,expected=object.chartFormat![key]!;assert.equal(actual.fontFamily,expected.fontFamily);assert.equal(actual.color,expected.color);assert.equal(actual.bold,expected.bold??false);assert(Math.abs(actual.fontSize!-expected.fontSize!)<.01);}
+assert(Math.abs(roundtrip.w-object.w)<.01);assert(Math.abs(roundtrip.h-object.h)<.01);
+console.log('Chart SVG geometry, exact labels, native PPTX export and reimport PASS');
