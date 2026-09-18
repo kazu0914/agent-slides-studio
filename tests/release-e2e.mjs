@@ -11,7 +11,7 @@ async function start(dir){proc=spawn(process.execPath,[join(release,'dist-local/
 async function stop(){if(proc){const p=proc;proc=null;if(p.exitCode===null)await new Promise(r=>{p.on('exit',r);p.kill();});}}
 async function space(){const d=await mkdtemp(join(tmpdir(),'agent-slides-release-'));dirs.push(d);for(const n of ['dist-local','drizzle'])await symlink(join(release,n),join(d,n));return d;}
 async function api(path,body,method){const r=await fetch(origin+path,{method:method||(body?'POST':'GET'),headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const j=await r.json();assert(r.ok,JSON.stringify(j));return j;}
-try{const d=await space();await start(d);assert.equal((await api('/api/codex/status')).state,'missing');assert.deepEqual(await api('/api/backgrounds'),['public-blue','public-green','public-orange','public-sunshine','public-hearts']);const response=await fetch(origin);assert.equal(response.headers.get('x-frame-options'),'DENY');assert(response.headers.get('content-security-policy').includes("frame-ancestors 'none'"));
+try{const d=await space();await start(d);assert.equal((await api('/api/codex/status')).state,'missing');assert.deepEqual(await api('/api/backgrounds'),['public-blue','public-green','public-orange','public-sunshine','public-hearts','public-pop-geometry','public-paper-pastel','public-memphis','public-soft-3d','public-aurora','public-sunset','public-midnight','public-fresh-mint']);const response=await fetch(origin);assert.equal(response.headers.get('x-frame-options'),'DENY');assert(response.headers.get('content-security-policy').includes("frame-ancestors 'none'"));
 for(const headers of [{Origin:'https://example.invalid'},{Host:'example.invalid'},{'Sec-Fetch-Site':'cross-site'}])assert.equal(await new Promise((ok,bad)=>{const r=httpRequest(origin+'/api/decks',{headers},res=>{res.resume();ok(res.statusCode);});r.on('error',bad);r.end();}),403,JSON.stringify(headers));
 const initial=(await api('/api/deck')).deck;
 // 日本語のUTF-8バイト列の途中でHTTPチャンクを分割する。
@@ -48,14 +48,14 @@ await p.waitForTimeout(1300);assert.equal(typingSaves,0,'IME変換中は保存�
 assert(await p.locator('.center .hero-copy h2').evaluate(el=>document.activeElement===el));
 await p.locator('.center .hero-copy h2').evaluate(el=>el.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true})));
 await p.locator('.projectbar').click({position:{x:5,y:5}});await p.waitForFunction(()=>document.querySelector('.projectbar')?.textContent?.includes('保存済み'));const tutorialId=new URL(p.url()).pathname.split('/').pop();assert.equal((await api('/api/deck?deckId='+tutorialId)).deck.slides[0].title,'ガイドに沿って編集');await p.getByRole('button',{name:'プレゼンテーション',exact:true}).click();await p.getByRole('dialog',{name:'プレゼンテーション',exact:true}).waitFor();await p.keyboard.press('Escape');
-for(const [bg,label] of [['public-blue','ブルーウェーブ'],['public-green','グリーンウェーブ'],['public-orange','オレンジジオメトリ'],['public-sunshine','サンシャイン'],['public-hearts','ピンクハート']]){
+for(const [bg,label] of [['public-blue','ブルーウェーブ'],['public-green','グリーンウェーブ'],['public-orange','オレンジジオメトリ'],['public-sunshine','サンシャイン'],['public-hearts','ピンクハート'],['public-pop-geometry','ポップジオメトリ'],['public-paper-pastel','パステルペーパー'],['public-memphis','ミントメンフィス'],['public-soft-3d','ソフト3D'],['public-aurora','オーロラ'],['public-sunset','サンセット'],['public-midnight','ミッドナイト'],['public-fresh-mint','フレッシュミント']]){
  await p.getByRole('button',{name:'背景テンプレート '+label,exact:true}).click();
  await p.waitForFunction(()=>document.querySelector('.projectbar')?.textContent?.includes('保存済み'));
  assert.equal((await api('/api/deck?deckId='+tutorialId)).deck.slides[0].backgroundTemplate,bg);
  assert((await p.locator('.center .slide').getAttribute('style')).includes(bg+'.png'));
  assert.equal((await fetch(origin+'/backgrounds/'+bg+'.png')).status,200);
 }
-console.log('PASS: five public backgrounds selected/rendered/persisted');
+console.log('PASS: thirteen public backgrounds selected/rendered/persisted');
 const cardDeck={...initial,title:'カード複数選択テスト',slides:[{...initial.slides[0],layout:'flow',theme:'dark',backgroundTemplate:'none',artworkKind:'none',animation:'none',items:[0,1,2].map(i=>({title:'項目 '+(i+1),body:'複数選択の確認'})),objects:[]}]};
 const cardId=(await api('/api/decks',cardDeck)).id;
 const cardPage=await browser.newPage({viewport:{width:1500,height:1000}});

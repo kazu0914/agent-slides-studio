@@ -213,7 +213,7 @@ export function SlideView({
           ),
         } as CSSProperties
       }
-      className={`slide ${slide.imported ? "imported-slide" : ""} theme-${slide.backgroundTemplate && slide.backgroundTemplate !== "none" ? "white" : slide.theme} layout-${slide.layout} ${!slide.backgroundTemplate || slide.backgroundTemplate === "none" ? (slide.theme !== "white" ? "hero-slide" : "") : ""} ${"motion-" + slide.animation} ${animate ? "" : "motion-paused"} ${editing ? "editing-slide" : ""}`}
+      className={`slide ${slide.imported ? "imported-slide" : ""} theme-${slide.backgroundTemplate === "public-midnight" ? "dark" : slide.backgroundTemplate && slide.backgroundTemplate !== "none" ? "white" : slide.theme} layout-${slide.layout} ${!slide.backgroundTemplate || slide.backgroundTemplate === "none" ? (slide.theme !== "white" ? "hero-slide" : "") : ""} ${"motion-" + slide.animation} ${animate ? "" : "motion-paused"} ${editing ? "editing-slide" : ""}`}
       data-testid="slide-canvas"
     >
       <DragGuides guides={rangeSelection.guides}/>
