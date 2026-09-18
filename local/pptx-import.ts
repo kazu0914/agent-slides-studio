@@ -51,6 +51,28 @@ export function importPptx(bytes:Uint8Array,name:string,saveImage:(data:string)=
      add({...box,name:objectName,kind:'image',src,fit:'cover'});continue;
     }
     if(kind==='graphicFrame'){
+     const chartRef=descendants(node,'chart')[0];
+     if(chartRef){
+      const chartPath=relationships.find(r=>r.id===attr(chartRef,'r:id')&&r.type.endsWith('/chart'))?.path;
+      if(!chartPath||!files[chartPath]){warn('グラフの参照先がないため取り込めませんでした。');continue;}
+      const chartRoot=xml(chartPath),plot=descendants(chartRoot,'plotArea')[0],plots=children(plot).filter(e=>e.localName?.endsWith('Chart'));
+      const chart=plots[0],kind=chart?.localName;
+      if(plots.length!==1||!['barChart','lineChart','pieChart'].includes(kind||'')||(kind==='barChart'&&attr(child(chart,'barDir'),'val')!=='col')||['stacked','percentStacked'].includes(attr(child(chart,'grouping'),'val'))){warn('この種類のグラフは未対応です（縦棒・折れ線・円に対応）。');continue;}
+      const series=children(chart,'ser');
+      // 埋め込みキャッシュをインデックス順に読み、欠損値をゼロに置き換えない。
+      const points=(parent:Element|undefined)=>{const cache=descendants(parent,'strCache')[0]||descendants(parent,'numCache')[0]||child(parent,'strLit')||child(parent,'numLit')||descendants(parent,'multiLvlStrCache')[0];const levels=children(cache,'lvl');if(levels.length>1)return null;const pts=children(levels[0]||cache,'pt'),n=num(child(cache,'ptCount'),'val',pts.length);if(!Number.isInteger(n)||n<1||n>29)return null;const values=Array<string>(n);for(const pt of pts){const i=num(pt,'idx',-1);if(!Number.isInteger(i)||i<0||i>=n||values[i]!==undefined)return null;values[i]=child(pt,'v')?.textContent||'';}return Array.from({length:n},(_,i)=>values[i]).every(v=>v!==undefined)?values:null;};
+      const data=series.map((s,i)=>({name:child(child(s,'tx'),'v')?.textContent||descendants(child(s,'tx'),'v')[0]?.textContent||`系列 ${i+1}`,categories:points(child(s,'cat')),values:points(child(s,'val'))}));
+      const cats=data[0]?.categories;
+      if(!cats||!data.length||data.length>11||(kind==='pieChart'&&data.length!==1)||data.some(s=>!s.categories||JSON.stringify(s.categories)!==JSON.stringify(cats)||!s.values||s.values.length!==cats.length||s.values.some(v=>!v.trim()||!Number.isFinite(Number(v))))){warn('グラフの保存済みデータが欠損しているか、対応サイズを超えているため取り込めませんでした。');continue;}
+      // 元の軸・数値表示・文字サイズを保持し、保存後にも失われないようにする。
+      const axis=child(plot,'valAx'),category=child(plot,'catAx'),labels=child(chart,'dLbls')||child(series[0],'dLbls');
+      const readStyle=(parent:Element|undefined)=>{const rp=descendants(child(parent,'txPr'),'defRPr')[0];const family=attr(child(rp,'ea'),'typeface')||attr(child(rp,'latin'),'typeface');return {fontFamily:fontFamilies.includes(family as typeof fontFamilies[number])?family as typeof fontFamilies[number]:'Arial' as const,fontSize:Math.max(6,Math.min(160,num(rp,'sz',1800)/100*12700*scale*.75)),color:color(child(rp,'solidFill'),'#526575'),bold:attr(rp,'b')==='1'};};
+      const optionalNumber=(parent:Element|undefined,key:string)=>{const e=child(parent,key);const n=Number(attr(e,'val'));return e&&Number.isFinite(n)?n:undefined;};
+      const majorUnit=optionalNumber(axis,'majorUnit');
+      const chartFormat={colors:series.map((s,i)=>color(child(child(s,'spPr'),'solidFill'),['#2454ef','#13a89e','#ef8244','#b26de3','#e0507a','#71819a'][i%6])),showLegend:!!descendants(chartRoot,'legend').length,showValue:['1','true'].includes(attr(child(labels,'showVal'),'val')),minimum:optionalNumber(child(axis,'scaling'),'min'),maximum:optionalNumber(child(axis,'scaling'),'max'),majorUnit:majorUnit&&majorUnit>0?majorUnit:undefined,numberFormat:attr(child(axis,'numFmt'),'formatCode','General'),valueFormat:attr(child(labels,'numFmt'),'formatCode')||descendants(child(series[0],'val'),'formatCode')[0]?.textContent||'General',gapWidth:Math.max(0,Math.min(500,num(child(chart,'gapWidth'),'val',150))),categoryStyle:readStyle(category),axisStyle:readStyle(axis),labelStyle:readStyle(labels),gridColor:color(child(child(child(child(axis,'majorGridlines'),'spPr'),'ln'),'solidFill'),'#e2eaf0')};
+      add({...box,chartFormat,name:objectName,kind:'chart',chartType:kind==='lineChart'?'line':kind==='pieChart'?'pie':'bar',cells:[['項目',...data.map(s=>s.name)],...cats.map((label,i)=>[label,...data.map(s=>s.values![i])])],style:{color:'#17233b'}});
+      continue;
+     }
      const tbl=descendants(node,'tbl')[0];if(tbl){const cells=children(tbl,'tr').map(row=>children(row,'tc').map(c=>text(child(c,'txBody'))));add({...box,name:objectName,kind:'table',cells,style:{fontSize:16},fill:'#e8efff'});warn('表の罫線・結合・書式は標準スタイルに置き換えています。');}else warn('グラフ・SmartArt・埋め込みオブジェクトは未対応です。');continue;
     }
     const txBody=child(node,'txBody'),value=text(txBody),geometry=attr(child(sp,'prstGeom'),'prst','rect');
@@ -67,7 +89,7 @@ export function importPptx(bytes:Uint8Array,name:string,saveImage:(data:string)=
   if(child(root,'timing')||child(root,'transition'))warn('アニメーション・画面切り替えは取り込まれません。');
   const layout=relationships.find(r=>r.type.endsWith('/slideLayout'));if(layout&&files[layout.path]){const lr=xml(layout.path);if(children(child(child(lr,'cSld'),'spTree')).some(n=>['sp','pic','grpSp'].includes(n.localName||'')&&!descendants(n,'ph').length))warn('スライドマスター／レイアウトの装飾は取り込まれません。');}
   const notesRef=relationships.find(r=>r.type.endsWith('/notesSlide'));let notes='';if(notesRef&&files[notesRef.path])notes=descendants(xml(notesRef.path),'sp').filter(n=>!['sldNum','hdr','ftr','dt','sldImg'].includes(attr(descendants(n,'ph')[0],'type'))).map(n=>text(child(n,'txBody'))).filter(Boolean).join('\n');
-  if(notes.length>4000)throw Error(`${index+1}枚目のノートが4000文字を超えています`);
+  if(notes.length>20000)throw Error(`${index+1}枚目のノートが20000文字を超えています`);
   return {id:randomUUID(),title:(objects.filter(o=>o.kind==='text').sort((a,b)=>(b.style.fontSize||0)-(a.style.fontSize||0))[0]?.text||`スライド ${index+1}`).slice(0,90),body:'',eyebrow:'',layout:'statement',theme:'white',animation:'none',artworkKind:'none',imported:true,backgroundColor:color(child(child(child(cs,'bg'),'bgPr'),'solidFill'),'#ffffff'),notes,objects,items:[],strokes:[]};
  });
  return {deck:deckSchema.parse({title:name.replace(/\.pptx$/i,'').slice(0,100)||'インポートしたスライド',slides}),warnings:[...warnings]};

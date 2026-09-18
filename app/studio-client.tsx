@@ -213,7 +213,7 @@ export function SlideView({
           ),
         } as CSSProperties
       }
-      className={`slide ${slide.imported ? "imported-slide" : ""} theme-${slide.backgroundTemplate && slide.backgroundTemplate !== "none" ? "white" : slide.theme} layout-${slide.layout} ${!slide.backgroundTemplate || slide.backgroundTemplate === "none" ? (slide.theme !== "white" ? "hero-slide" : "") : ""} ${"motion-" + slide.animation} ${animate ? "" : "motion-paused"} ${editing ? "editing-slide" : ""}`}
+      className={`slide ${slide.imported ? "imported-slide" : ""} theme-${slide.backgroundTemplate === "public-midnight" ? "dark" : slide.backgroundTemplate && slide.backgroundTemplate !== "none" ? "white" : slide.theme} layout-${slide.layout} ${!slide.backgroundTemplate || slide.backgroundTemplate === "none" ? (slide.theme !== "white" ? "hero-slide" : "") : ""} ${"motion-" + slide.animation} ${animate ? "" : "motion-paused"} ${editing ? "editing-slide" : ""}`}
       data-testid="slide-canvas"
     >
       <DragGuides guides={rangeSelection.guides}/>
@@ -351,7 +351,7 @@ export function SlideView({
           onBegin={() => onGesture?.()}
         />
       )}
-      <FreeObjects objects={(slide.objects||[]).filter(o=>(o.appearAt||0)<=revealStep)} editable={(editing || editable) && !marker && !!onObjects} selected={objectSelection} onSelect={onObjectSelection} onChange={onObjects} onBegin={onGesture}/>
+      <FreeObjects linksActive={!editing&&!editable&&!marker} objects={(slide.objects||[]).filter(o=>(o.appearAt||0)<=revealStep)} editable={(editing || editable) && !marker && !!onObjects} selected={objectSelection} onSelect={onObjectSelection} onChange={onObjects} onBegin={onGesture}/>
       {!marker&&baseSelection.map(key=><BaseSelectionOutline key={key} host={slideRoot} elementKey={key} slide={slide}/>)}
       {rangeSelection.range&&<div className="canvas-range-selection" data-testid="range-selection" style={{left:`${rangeSelection.range.x}%`,top:`${rangeSelection.range.y}%`,width:`${rangeSelection.range.w}%`,height:`${rangeSelection.range.h}%`}}/>}
       <svg
@@ -973,7 +973,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
       if(document.querySelector('[aria-modal="true"]:not(.presentation)'))return;
       if (
         (e.target as HTMLElement).closest(
-          "input,textarea,select,[data-free-object],[contenteditable=true],[contenteditable=plaintext-only]",
+          present ? "input,textarea,select,[contenteditable=true],[contenteditable=plaintext-only]" : "input,textarea,select,[data-free-object],[contenteditable=true],[contenteditable=plaintext-only]",
         )
       )
         return;
@@ -2616,7 +2616,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                 スピーカーノート
                 <textarea
                   value={draft.notes}
-                  maxLength={4000}
+                  maxLength={20000}
                   rows={3}
                   onChange={(e) => changeDraft("notes", e.target.value)}
                 />

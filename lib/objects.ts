@@ -2,10 +2,20 @@ import {z} from 'zod';
 export const fontFamilies=['Hiragino Sans','Noto Sans JP','Arial','Georgia','Times New Roman','Courier New'] as const;
 export const textStyleSchema=z.object({fontFamily:z.enum(fontFamilies).optional(),fontSize:z.number().min(6).max(160).optional(),bold:z.boolean().optional(),italic:z.boolean().optional(),underline:z.boolean().optional(),color:z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),align:z.enum(['left','center','right']).optional(),lineHeight:z.number().min(.8).max(3).optional()});
 export type TextStyle=z.infer<typeof textStyleSchema>;
+export const chartFormatSchema=z.object({
+ colors:z.array(z.string().regex(/^#[0-9a-fA-F]{6}$/)).max(30).optional(),
+ showLegend:z.boolean().optional(),showValue:z.boolean().optional(),
+ minimum:z.number().finite().optional(),maximum:z.number().finite().optional(),majorUnit:z.number().positive().optional(),
+ numberFormat:z.string().max(100).optional(),valueFormat:z.string().max(100).optional(),gapWidth:z.number().min(0).max(500).optional(),
+ categoryStyle:textStyleSchema.optional(),axisStyle:textStyleSchema.optional(),labelStyle:textStyleSchema.optional(),
+ gridColor:z.string().regex(/^#[0-9a-fA-F]{6}$/).optional()
+});
+export function safeLink(value:string){try{const u=new URL(value);return ['https:','http:','mailto:'].includes(u.protocol)&&!u.username&&!u.password&&!/[\u0000-\u0020]/.test(value);}catch{return false;}}
 export const objectSchema=z.object({
  id:z.string().min(1).max(80).regex(/^[a-zA-Z0-9_-]+$/),name:z.string().max(100),kind:z.enum(['text','image','shape','table','chart','motion']),
  x:z.number().min(-1600).max(3200),y:z.number().min(-900).max(1800),w:z.number().min(1).max(3200),h:z.number().min(1).max(1800),
  rotation:z.number().min(-360).max(360).default(0),opacity:z.number().min(0).max(1).default(1),locked:z.boolean().default(false),hidden:z.boolean().default(false),groupId:z.string().max(80).optional(),
+ href:z.string().max(2048).refine(safeLink,'https:// で始まるURLを入力してください').optional(),
  customSvg:z.string().max(100000).optional(),
  appearAt:z.number().int().min(0).max(100).optional(),
  fillOpacity:z.number().min(0).max(1).optional(),strokeWidth:z.number().min(0).max(100).optional(),verticalAlign:z.enum(['top','center','bottom']).optional(),
@@ -13,6 +23,7 @@ export const objectSchema=z.object({
  src:z.string().regex(/^\/api\/assets\/[a-f0-9-]+\.(png|jpg|webp)$/).optional(),fit:z.enum(['contain','cover']).default('contain'),cropX:z.number().min(0).max(100).default(50),cropY:z.number().min(0).max(100).default(50),
  shape:z.enum(['rectangle','ellipse','arrow','line']).default('rectangle'),fill:z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#e8efff'),stroke:z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#2454ef'),
  cells:z.array(z.array(z.string().max(2000)).min(1).max(12)).max(30).default([]),
+ chartFormat:chartFormatSchema.optional(),
  chartType:z.enum(['bar','line','pie']).default('bar'),motion:z.enum(['holo-cards','holo-database','holo-server','holo-target','holo-funnel','holo-pyramid','holo-solar','holo-gears','holo-platform','holo-honeycomb','holo-equalizer','holo-prism','holo-chart','holo-network','holo-flow','holo-grid','holo-document','holo-shield','holo-cloud','holo-compare','holo-timeline','orbit','arrow','cube','globe','rings','helix','crystal','wave','particles','pulse','bars']).default('cube'),duration:z.number().min(2).max(120).default(16)
 }).superRefine((o,c)=>{if(o.kind==='image'&&!o.src)c.addIssue({code:'custom',message:'画像がありません'});if((o.kind==='table'||o.kind==='chart')&&(!o.cells.length||o.cells.some(r=>r.length!==o.cells[0].length)))c.addIssue({code:'custom',message:'表の列数を揃えてください'});if(o.kind==='chart'&&(o.cells.length<2||o.cells[0].length<2||o.cells.slice(1).some(r=>r.slice(1).some(v=>!v.trim()||!Number.isFinite(Number(v))))))c.addIssue({code:'custom',message:'グラフの2行目以降には数値を入力してください'});});
 export type SlideObject=z.infer<typeof objectSchema>;
