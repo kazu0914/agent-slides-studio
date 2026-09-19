@@ -1,5 +1,6 @@
 import type {Slide} from './model';
 export const layoutPatterns = [
+ ['image-right','右画像・70/30','左に文章、右3割に画像を配置'],
  ['hero','表紙','大きなタイトルとビジュアル'],['statement','メッセージ','ひとつの主張を伝える'],
  ['cards','カード','複数のポイントを並列に'],['flow','フロー','作業の流れや手順'],
  ['comparison','比較','選択肢やBefore / After'],['metrics','数値・実績','指標を大きく見せる'],
