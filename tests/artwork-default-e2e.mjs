@@ -1,0 +1,7 @@
+import assert from 'node:assert/strict';
+export async function artworkDefaultTest(browser,api,origin,initial){
+ const {id}=await api('/api/decks',{...initial,slides:[{...initial.slides[0],layout:'statement',artworkKind:undefined}]});
+ const p=await browser.newPage();await p.goto(origin+'/deck/'+id);await p.getByRole('button',{name:'編集',exact:true}).click();assert(await p.locator('.center .statement-arrow').count());
+ await p.getByRole('button',{name:'このスライドの装飾を削除',exact:true}).click();await p.locator('.center .statement-arrow').waitFor({state:'detached'});await p.waitForFunction(()=>document.querySelector('.projectbar')?.textContent?.includes('保存済み'));await p.reload();assert.equal(await p.locator('.center .statement-arrow').count(),0);assert.equal((await api('/api/deck?deckId='+id)).deck.slides[0].artworkKind,'none');
+ await p.getByRole('button',{name:'スライドを追加',exact:true}).first().click();await p.waitForFunction(()=>document.querySelector('.center .slide')?.textContent?.includes('新しいアイデア'));await p.waitForFunction(()=>document.querySelector('.projectbar')?.textContent?.includes('保存済み'));assert.equal(await p.locator('.center .statement-arrow').count(),0);assert.equal((await api('/api/deck?deckId='+id)).deck.slides.at(-1).artworkKind,'none');await p.reload();assert.equal(await p.locator('.center .statement-arrow').count(),0);await p.close();console.log('PASS: legacy arrow removal persists; added slide has no default arrow');
+}

@@ -148,7 +148,7 @@ export function SlideView({
   const slideRoot = useRef<HTMLDivElement>(null);
   const rangeSelection=useRangeSelection(slideRoot,sourceSlide,rangeEnabled&&editable,{cards:cardSelection,objects:objectSelection,elements:baseSelection},onCanvasSelection,onSelectionEdit);
   const slide=rangeSelection.preview?{...sourceSlide,...rangeSelection.preview}:sourceSlide;
-  const artworkKind =
+  const artworkKind = slide.layout === "image-right" ? "none" :
     slide.artworkKind ??
     (slide.layout === "hero"
       ? "orbit"
@@ -216,6 +216,7 @@ export function SlideView({
       className={`slide ${slide.imported ? "imported-slide" : ""} theme-${slide.backgroundTemplate === "public-midnight" ? "dark" : slide.backgroundTemplate && slide.backgroundTemplate !== "none" ? "white" : slide.theme} layout-${slide.layout} ${!slide.backgroundTemplate || slide.backgroundTemplate === "none" ? (slide.theme !== "white" ? "hero-slide" : "") : ""} ${"motion-" + slide.animation} ${animate ? "" : "motion-paused"} ${editing ? "editing-slide" : ""}`}
       data-testid="slide-canvas"
     >
+      {slide.layout==='image-right'&&<div className="side-image-panel">{slide.sideImage?<img src={slide.sideImage.src} alt="" style={{objectPosition:`${slide.sideImage.position}% 50%`}}/>:<div className="side-image-placeholder"><span>IMAGE</span><small>右画像・70/30</small></div>}</div>}
       <DragGuides guides={rangeSelection.guides}/>
       <CanvasText
         as="div"
@@ -1019,6 +1020,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
   }
   function chooseLayout(layout: Slide["layout"]) {
     changeDraft("layout",layout);
+    if(layout==='image-right')setDrafts(d=>({...d,[slide.id]:{...(d[slide.id]??slide),layout,theme:'white',backgroundTemplate:'none',backgroundColor:'#ffffff'}}));
     if(hasLayoutItems(layout) && !draft.items.length) setDrafts(d=>({...d,[slide.id]:{...(d[slide.id]??slide),layout,items:defaultLayoutItems(layout)}}));
   }
   function changeDraft<K extends keyof Slide>(key: K, value: Slide[K]) {
@@ -1259,6 +1261,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
     next.slides.push({
       id,
       title: "新しいアイデア",
+      artworkKind: "none",
       backgroundTemplate: defaultBackground(backgrounds),
       body: "伝えたいことを、ここから。",
       eyebrow: "YOUR NEXT IDEA",
@@ -2357,8 +2360,10 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                 </div>
               </div>
               <details className="base-text-style"><summary>クリックで順に表示</summary><p>0は最初から表示。同じ番号の要素は同時に表示します。</p>{(['title','body','eyebrow','items','artwork'] as const).map((key,i)=><label key={key}>{['タイトル','本文','ラベル','項目','装飾'][i]}<input aria-label={`クリック順番 ${key}`} type="number" min="0" max="100" value={draft.revealSteps?.[key]||0} onChange={e=>changeDraft('revealSteps',{...draft.revealSteps,[key]:Math.min(100,Math.max(0,Math.round(Number(e.target.value))))})}/></label>)}</details>
+              {(draft.layout!=='image-right'&&(draft.artworkKind??(draft.layout==='hero'?'orbit':draft.layout==='statement'?'arrow':'none'))!=='none')&&<div className="existing-artwork-control"><span>スライドの装飾</span><button type="button" onClick={()=>changeDraft('artworkKind','none')}>このスライドの装飾を削除</button></div>}
               <ObjectPanel objects={draft.objects||[]} selected={objectSelection} onSelect={ids=>{setObjectSelection(ids);setLayoutEditing(false);}} onChange={objects=>changeDraft("objects",objects)} onError={setDraftError} onImage={insertImage}/>
               <details className="base-text-style"><summary>既存の文字の書式</summary><label>対象<select aria-label="書式を変更する文字" value={styleTarget} onChange={e=>setStyleTarget(e.target.value as typeof styleTarget)}><option value="title">タイトル</option><option value="body">本文</option><option value="eyebrow">ラベル</option><option value="items">項目</option></select></label><TextStyleControls style={draft.textStyles?.[styleTarget]||{}} onChange={style=>changeDraft("textStyles",{...draft.textStyles,[styleTarget]:style})}/><button type="button" onClick={()=>{if(styleTarget==='items')changeDraft('items',draft.items.map(item=>({...item,body:item.body.split('\n').map(t=>t.startsWith('• ')?t.slice(2):`• ${t}`).join('\n')})));else changeDraft(styleTarget,draft[styleTarget].split('\n').map(t=>t.startsWith('• ')?t.slice(2):`• ${t}`).join('\n'));}}>箇条書きを切替</button><p>赤い下線は文字のはみ出しを示します。サイズ・位置・改行を調整してください。</p></details>
+              {draft.layout==='image-right'&&<SideImageControl key={draft.id} value={draft.sideImage} onChange={value=>changeDraft('sideImage',value)} onError={setDraftError}/>}
               <section className="layout-library">
                 <h3>スライドパターン</h3>
                 <p>内容を保ったまま配置を切り替えます。</p>
@@ -2917,4 +2922,9 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
       )}
     </div>
   );
+}
+
+function SideImageControl({value,onChange,onError}:{value:Slide['sideImage'];onChange:(value:Slide['sideImage'])=>void;onError:(message:string)=>void}) {
+ const [busy,setBusy]=useState(false);
+ return <section className="side-image-control"><h3>右側の画像</h3><p>画像を右3割いっぱいに表示します。</p><label>{busy?'読み込み中…':'画像を選ぶ・差し替える'}<input type="file" aria-label="右側の画像を選ぶ" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={async e=>{const file=e.target.files?.[0];e.target.value='';if(!file)return;setBusy(true);try{onChange({src:await uploadImage(file),position:50});}catch(error){onError((error as Error).message);}finally{setBusy(false);}}}/></label>{value&&<><label>切り抜き位置<input aria-label="右画像の切り抜き位置" type="range" min="0" max="100" value={value.position} onChange={e=>onChange({...value,position:Number(e.target.value)})}/></label><button type="button" onClick={()=>onChange(null)}>画像を外す</button></>}</section>;
 }
