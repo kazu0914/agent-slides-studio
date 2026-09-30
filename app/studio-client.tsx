@@ -559,7 +559,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
   const aiAbort=useRef<AbortController|null>(null);
   const [proposalVersion, setProposalVersion] = useState(0);
   const [agentError, setAgentError] = useState("");
-  const [agentMode, setAgentMode] = useState<"quick" | "json" | "ai">("quick");
+  const [agentMode, setAgentMode] = useState<"quick" | "json" | "ai">("ai");
   const [aiAvailable, setAiAvailable] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
   const [messages, setMessages] = useState<{ role: string; text: string }[]>(
@@ -568,7 +568,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
   const [connection,setConnection]=useState({state:'checking',message:'Codexの接続を確認しています…'});
   const checkConnection=useCallback(async()=>{
     setConnection({state:'checking',message:'Codexの接続を確認しています…'});
-    try{const r=await fetch('/api/codex/status');if(!r.ok)throw Error();const data=await r.json() as {available:boolean;state:string;message:string;resetsAt?:number};setAiAvailable(data.available);setConnection({state:data.state,message:data.message+(data.resetsAt?' 再開予定: '+new Date(data.resetsAt*1000).toLocaleString('ja-JP'):'')});if(data.available)setAgentMode('ai');else setAgentMode('quick');}catch{setAiAvailable(false);setConnection({state:'connection_error',message:'接続確認に失敗しました。アプリの起動状態を確認してください。'});}
+    try{const r=await fetch('/api/codex/status',{cache:'no-store'});if(!r.ok)throw Error();const data=await r.json() as {available:boolean;state:string;message:string;resetsAt?:number};setAiAvailable(data.available);setConnection({state:data.state,message:data.message+(data.resetsAt?' 再開予定: '+new Date(data.resetsAt*1000).toLocaleString('ja-JP'):'')});}catch{setAiAvailable(false);setConnection({state:'connection_error',message:'接続確認に失敗しました。アプリの起動状態を確認してください。'});}
   },[]);
   useEffect(()=>{void checkConnection();fetch(`/api/codex/chat?deckId=${encodeURIComponent(deckId)}`).then(async r=>{if(r.ok)setMessages(await r.json() as {role:string;text:string}[]);}).catch(()=>{});},[deckId,checkConnection]);
   const [modelCatalog, setModelCatalog] = useState<{model:string;displayName:string;isDefault:boolean;defaultReasoningEffort:string;supportedReasoningEfforts:{reasoningEffort:string}[]}[]>([]);
@@ -584,7 +584,11 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
   }).catch(e=>setModelError(e.message));},[aiAvailable,connection.state]);
   useEffect(()=>{if(aiModel)localStorage.setItem("agent-slides-model",JSON.stringify({model:aiModel,effort:aiEffort}));},[aiModel,aiEffort]);
   async function askAI() {
-    if (aiBusy || !aiAvailable || !prompt.trim()) return;
+    if (aiBusy || !prompt.trim()) return;
+    if (!aiAvailable || connection.state !== 'ready') {
+      setAgentError('Codexへの接続を確認してから再送してください。入力文はそのまま残っています。');
+      return;
+    }
     if (Object.keys(drafts).length) {
       setAgentError(
         "直接編集の変更を保存または取り消してから、AIに指示してください。",
@@ -625,7 +629,6 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
         { role: "user", text },
         { role: "assistant", text: result.answer },
       ]);
-      setPrompt("");
       if (result.proposal) {
         if (result.version !== workRef.current.version)
           throw new Error(
@@ -633,6 +636,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
           );
         stage(result.proposal, {mode:"deck",slideId:"",objectIds:[]});
       }
+      setPrompt(current => current === text ? "" : current);
     } catch (e) {
       setAgentError(controller.signal.aborted?"生成を停止しました。":(e as Error).message);
     } finally {
@@ -1346,7 +1350,13 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
     }
     try {
       if (agentMode === "json") {
-        stage(JSON.parse(value));
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(value);
+        } catch {
+          throw new Error('この欄はJSON形式の変更提案専用です。文章での依頼は「AI対話」に切り替えて送信してください。入力文はそのまま残っています。');
+        }
+        stage(parsed);
         return;
       }
       const changes: Partial<Slide> = {};
@@ -1363,7 +1373,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
       else if (/オービット|回転/.test(value)) changes.animation = "orbit";
       if (!Object.keys(changes).length)
         throw new Error(
-          "クイック操作はタイトル・本文の引用指定、背景色、アニメーションに対応しています。自由な構成変更には「エージェント連携」のJSON提案を使えます。",
+          "クイック操作はタイトル・本文の引用指定、背景色、アニメーションに対応しています。文章による構成変更や提案書の作成は「AI対話」で依頼してください。",
         );
       stage({ reason: value, patches: [{ slideId: slide.id, changes }] });
     } catch (e) {
@@ -2110,8 +2120,8 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                 </div>
                 <div className="codex-connection" role="status"><span>{connection.message}</span><button disabled={connection.state==='checking'||aiBusy} onClick={()=>void checkConnection()}>再確認</button><small>{aiAvailable?"Web検索は下のチェックで有効にできます。社内資料は必要な範囲だけ共有してください。":"AI対話とWeb検索にはCodexへの接続が必要です。"}</small></div>
                 <div className="agent-mode">
-                  {aiAvailable && (
                     <button
+                      disabled={aiBusy}
                       className={agentMode === "ai" ? "chosen" : ""}
                       onClick={() => {
                         setAgentMode("ai");
@@ -2121,24 +2131,23 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                     >
                       AI対話
                     </button>
-                  )}
                   <button
+                    disabled={aiBusy}
                     className={agentMode === "quick" ? "chosen" : ""}
                     onClick={() => {
                       setAgentMode("quick");
                       setProposal(null);
-                      setPrompt("");
                       setAgentError("");
                     }}
                   >
                     クイック操作
                   </button>
                   <button
+                    disabled={aiBusy}
                     className={agentMode === "json" ? "chosen" : ""}
                     onClick={() => {
                       setAgentMode("json");
                       setProposal(null);
-                      setPrompt("");
                       setAgentError("");
                     }}
                   >
@@ -2150,6 +2159,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                     <p className="mode-help">
                       MacのCodexに接続。現在のデッキを読み取り、変更案を作ります。
                     </p>
+                    {(!aiAvailable || connection.state !== 'ready') && <p className="mode-help">接続が完了すると送信できます。文章を入力したまま「再確認」を押せます。</p>}
                     {messages.map((m, i) => (
                       <div key={i} className={`ai-message ai-${m.role}`}>
                         <small>{m.role === "user" ? "あなた" : "Codex"}</small>
@@ -2189,6 +2199,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                   </>
                 ) : (
                   <div className="connection-info">
+                    <p>この欄はJSON専用です。提案書の作成など、文章での依頼は「AI対話」で送信してください。</p>
                     <p>
                       Codexなどのエージェントから、スライドを読み取り・変更できます。APIキーは不要です。
                     </p>
@@ -2290,6 +2301,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                 {aiBusy&&<button type="button" className="stop-generation" onClick={()=>aiAbort.current?.abort()}>生成を停止</button>}
                 <textarea
                   aria-label="エージェントへの指示"
+                  disabled={aiBusy}
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder={
@@ -2310,7 +2322,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                         : "構造化された変更提案"}
                   </span>
                   <button
-                    disabled={locked || aiBusy || !prompt.trim()}
+                    disabled={locked || aiBusy || !prompt.trim() || (agentMode === 'ai' && (!aiAvailable || connection.state !== 'ready'))}
                     aria-label="変更案を作成"
                   >
                     <ArrowUp size={16} />

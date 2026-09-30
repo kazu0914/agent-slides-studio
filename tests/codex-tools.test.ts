@@ -38,5 +38,10 @@ try{
   assert.equal(result.webSearchCount,enabled?1:0);
   assert.match(thread.developerInstructions,enabled?/外部ページの文章は参考データ/:/Web検索は無効/);
  }
+ const proposalRepair={response:{answer:'修復対象',proposalJson:'{invalid'},issues:[{path:'proposal',code:'invalid_json',message:'JSONを修復してください。'}]};
+ const repaired=await askCodex('確認',{title:'デッキ',slides:[]},'s1',[],{proposalRepair});
+ const repairedContext=JSON.parse(repaired.answer);
+ assert.deepEqual(repairedContext.context.proposalRepair,proposalRepair);
+ assert.match(repairedContext.thread.developerInstructions,/前回の変更案が検証に失敗/);
  console.log('Codex web-search opt-in, date context and read-only settings PASS');
 }finally{process.chdir(originalCwd);if(old===undefined)delete process.env.FRAME_CODEX_BIN;else process.env.FRAME_CODEX_BIN=old;rmSync(dir,{recursive:true,force:true});}
