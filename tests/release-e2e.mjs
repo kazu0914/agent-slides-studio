@@ -1,3 +1,5 @@
+import {editorUxTest} from './editor-ux-e2e.mjs';
+import {backgroundTest} from './background-e2e.mjs';
 import {tableLayoutTest} from './table-layout-e2e.mjs';
 import {textLayoutTest} from './text-layout-e2e.mjs';
 import {codexChatTest} from './codex-chat-e2e.mjs';
@@ -132,6 +134,8 @@ await fontSizeTest(browser,api,origin,initial);
 await linksTest(browser,api,origin,initial);
 await sideImageTest(browser,api,origin,initial);
 await textLayoutTest(browser,api,origin,initial);
+await editorUxTest(browser,api,origin,initial);
+await backgroundTest(browser,api,origin,initial);
 await tableLayoutTest(browser,api,origin,initial);
 await artworkDefaultTest(browser,api,origin,initial);
 await slideMotionTest(browser,api,origin,initial);

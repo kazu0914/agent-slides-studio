@@ -1,4 +1,5 @@
 'use client';
+import {resizeImage} from '@/lib/image-resize';
 import {useRef,useState,useLayoutEffect,useEffect,type CSSProperties} from 'react';
 import {type SlideObject,type TextStyle,safeLink} from '@/lib/objects';
 import {ImportedChart} from './imported-chart';
@@ -62,14 +63,6 @@ function ObjectBody({object:o,editing,inspect=false,imported=false,linksActive=f
  {o.kind==='motion'&&o.motion==='flow'&&o.flow&&<FlowDiagram flow={o.flow} color={o.fill} duration={o.duration} enabled={flowEnabled} playing={playing}/>}
  {o.kind==='motion'&&o.motion!=='flow'&&!o.customSvg&&<div style={{width:'100%',height:'100%','--art-color':o.fill,'--orbit-duration':`${o.duration}s`} as CSSProperties}><MotionArt kind={o.motion} strokeWidth={o.strokeWidth}/></div>}
  </div>{overflow&&inspect&&<span className="overflow-badge" role="img" aria-label="文字が枠を超えています" title={o.kind==='table'?'表の文字が枠を超えています。編集タブで列幅・高さを調整するか、「表の列幅と表示」で縮小を有効にしてください。':'文字が枠を超えています。文字枠を広げるか、文字サイズを小さくしてください。'}>!</span>}</>;
-}
-function resizeImage(o:SlideObject,dx:number,dy:number,corner:string):SlideObject {
- const a=(o.rotation||0)*Math.PI/180,c=Math.cos(a),s=Math.sin(a);
- const sx=corner.includes('w')?-1:1,sy=corner.includes('n')?-1:1;
- const lx=c*dx+s*dy,ly=-s*dx+c*dy;
- const factor=Math.max(20/o.w,20/o.h,Math.min(3200/o.w,1800/o.h,1+(sx*lx*o.w+sy*ly*o.h)/(o.w*o.w+o.h*o.h)));
- const w=o.w*factor,h=o.h*factor,ux=sx*(w-o.w)/2,uy=sy*(h-o.h)/2;
- return {...o,w,h,x:o.x+(o.w-w)/2+c*ux-s*uy,y:o.y+(o.h-h)/2+s*ux+c*uy};
 }
 function imageBounds(o:SlideObject,ratio?:number){
  if(o.fit!=='contain'||!ratio)return {x:0,y:0,w:o.w,h:o.h};

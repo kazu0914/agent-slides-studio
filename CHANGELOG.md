@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Keep extreme image resizing within valid dimensions and positions without moving the opposite corner.
+- Add browser regressions for cell editing, image handles, backgrounds and per-deck page restoration.
+
 - Preserve the selected slide per deck after reload.
 - Resize images from red handles aligned to the visible image corners.
 - Edit table cells directly with reliable first-click focus and a separate move grip.
