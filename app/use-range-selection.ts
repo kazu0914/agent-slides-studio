@@ -13,7 +13,14 @@ export function useRangeSelection(root:RefObject<HTMLDivElement|null>,source:Sli
  const count=selection.cards.length+selection.objects.length+selection.elements.length;
  const reset=()=>{active.current=null;previewRef.current=null;setPreview(null);setRange(null);setGuides([]);};
  useEffect(()=>{reset();},[source.id,enabled]);
- useEffect(()=>{const cancel=()=>reset();window.addEventListener('blur',cancel);return()=>window.removeEventListener('blur',cancel);},[]);
+ const finishRef=useRef<()=>void>(()=>{});
+ finishRef.current=()=>{const g=active.current;if(!g)return;const patch=previewRef.current;reset();if(g.mode==='move'&&g.moved&&patch)onCommit?.(patch);else if(g.mode==='range'&&!g.moved)onSelect(g.selection);if(root.current?.hasPointerCapture(g.pointer))root.current.releasePointerCapture(g.pointer);};
+ useEffect(()=>{
+  const end=(e:PointerEvent)=>{if(active.current?.pointer===e.pointerId)finishRef.current();};
+  const cancel=()=>reset();
+  window.addEventListener('pointerup',end,true);window.addEventListener('pointercancel',cancel,true);window.addEventListener('blur',cancel);
+  return()=>{window.removeEventListener('pointerup',end,true);window.removeEventListener('pointercancel',cancel,true);window.removeEventListener('blur',cancel);};
+ },[]);
  const targets=():Target[]=>{
   const host=root.current!;const result:Target[]=[];
   host.querySelectorAll<HTMLElement>('.slide-item,[data-free-object],[data-edit-element="title"],[data-edit-element="body"],[data-edit-element="eyebrow"],[data-edit-element="artwork"]').forEach(el=>{
@@ -54,7 +61,7 @@ export function useRangeSelection(root:RefObject<HTMLDivElement|null>,source:Sli
  const typing=(el:HTMLElement)=>!!el.closest('input,textarea,select')||!!el.closest('[contenteditable="plaintext-only"]:focus,[contenteditable="true"]:focus');
  const onPointerDownCapture=(e:ReactPointerEvent<HTMLDivElement>)=>{
   if(!enabled||e.button!==0||!onCommit)return;const el=e.target as HTMLElement;
-  if(e.detail>1||typing(el)||el.closest('.element-box')||el.closest('[data-object-resize],.object-resize,.element-resize,.card-handle-nw,.card-handle-ne,.card-handle-sw,.card-handle-se'))return;
+  if(e.detail>1||typing(el)||el.closest('[data-table-cell][contenteditable="plaintext-only"]')||el.closest('.element-box')||el.closest('[data-object-resize],.object-resize,.element-resize,.card-handle-nw,.card-handle-ne,.card-handle-sw,.card-handle-se'))return;
   const isItem=el.closest('[data-free-object],[data-card-index],[data-edit-element="title"],[data-edit-element="body"],[data-edit-element="eyebrow"],[data-edit-element="artwork"]');
   const move=!!isItem&&selectedTarget(el)&&!e.shiftKey&&!e.metaKey&&!e.ctrlKey;
   if(isItem&&!move){
@@ -71,7 +78,7 @@ export function useRangeSelection(root:RefObject<HTMLDivElement|null>,source:Sli
   if(!move)root.current!.setPointerCapture(e.pointerId);
  };
  const onPointerMoveCapture=(e:ReactPointerEvent<HTMLDivElement>)=>{
-  const g=active.current;if(!g||e.pointerId!==g.pointer)return;e.preventDefault();e.stopPropagation();
+  const g=active.current;if(!g||e.pointerId!==g.pointer)return;if(!(e.buttons&1)){finishRef.current();return;}e.preventDefault();e.stopPropagation();
   const dx=e.clientX-g.x,dy=e.clientY-g.y;if(!g.moved&&Math.hypot(dx,dy)<4)return;g.moved=true;
   if(g.mode==='move'){if(!root.current!.hasPointerCapture(e.pointerId))root.current!.setPointerCapture(e.pointerId);const selected=(t:Target)=>g.selection[t.kind].includes(t.id as never);
    const moving=g.targets.filter(selected).map(t=>t.rect);

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Preserve the selected slide per deck after reload.
+- Resize images from red handles aligned to the visible image corners.
+- Edit table cells directly with reliable first-click focus and a separate move grip.
+- Restore original backgrounds after changing imported slide backgrounds.
+
 - デッキの上限を500枚に統一。追加・複製・貼り付け・テンプレート・AI変更案・PPTX取り込みで検証し、501枚以上は拒否。
 - 工程・分岐の動くフロー図、スライドの登場・切替演出とプレビューを追加。フローの数値手入力、重なりを避けた挿入、接続に沿った読み上げに対応。
 - 外部エージェントの変更案に `baseDeckId`・`baseVersion` を必須化。古い版・別デッキ・未保存編集がある状態での取り込みを拒否。

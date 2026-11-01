@@ -1,4 +1,5 @@
 "use client";
+import {chooseBackground,restoreBackground} from '@/lib/background-edit';
 import {MAX_SLIDES} from "@/lib/limits.mjs";
 import {useDialog} from "./use-dialog";
 import {useSlideMotion} from "./use-slide-motion";
@@ -551,6 +552,12 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
   const workRef = useRef(work);
   const [loaded, setLoaded] = useState(false);
   const [selected, setSelected] = useState(0);
+  const restoredPosition = useRef('');
+  useEffect(()=>{
+    if(!loaded||restoredPosition.current!==deckId)return;
+    const current=work.deck.slides[selected];if(!current)return;
+    try{localStorage.setItem(`frame-page:${deckId}`,JSON.stringify({id:current.id,index:selected}));}catch{}
+  },[loaded,deckId,selected,work.deck.slides]);
   const [tab, setTab] = useState<"agent" | "edit" | "log">("agent");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -731,6 +738,12 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
       const next = await request(deckUrl);
       pending.current = null;
       setWorkspace(next);
+      if(restoredPosition.current!==deckId){
+        try{const saved=JSON.parse(localStorage.getItem(`frame-page:${deckId}`)||'null');
+          if(saved){const index=next.deck.slides.findIndex(s=>s.id===saved.id);setSelected(index>=0?index:Math.max(0,Math.min(Number.isInteger(saved.index)?saved.index:0,next.deck.slides.length-1)));}
+        }catch{}
+        restoredPosition.current=deckId;
+      }
       setLoaded(true);
     } catch (e) {
       setError((e as Error).message);
@@ -1050,6 +1063,10 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
     changeDraft("layout",layout);
     if(layout==='image-right')setDrafts(d=>({...d,[slide.id]:{...(d[slide.id]??slide),layout,theme:'white',backgroundTemplate:'none',backgroundColor:'#ffffff'}}));
     if(hasLayoutItems(layout) && !draft.items.length) setDrafts(d=>({...d,[slide.id]:{...(d[slide.id]??slide),layout,items:defaultLayoutItems(layout)}}));
+  }
+  function changeBackground(choice:Parameters<typeof chooseBackground>[1]|null){
+    recordDraft(`${slide.id}:background`,true);setDraftError('');
+    setDrafts(d=>{if(!d[slide.id])draftBases.current[slide.id]=structuredClone(slide);const current=d[slide.id]??slide;return {...d,[slide.id]:choice?chooseBackground(current,choice):restoreBackground(current)};});
   }
   function changeDraft<K extends keyof Slide>(key: K, value: Slide[K]) {
     recordDraft(`${slide.id}:${String(key)}`);
@@ -2519,8 +2536,9 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                   背景
                   <select
                     value={draft.theme}
+                    aria-label="背景色"
                     onChange={(e) =>
-                      changeDraft("theme", e.target.value as Slide["theme"])
+                      changeBackground({theme:e.target.value as Slide["theme"]})
                     }
                   >
                     {Object.entries(themes).map(([v, t]) => (
@@ -2533,17 +2551,17 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
               </div>
               <section className="background-templates">
                 <h3>背景テンプレート</h3>
-                <p>選ぶと現在のスライドに反映され、自動保存されます。</p>
+                <p>選ぶと現在のスライドに反映され、自動保存されます。取り込んだ全面背景は削除せず非表示にし、「元の背景に戻す」で復元できます。</p>
                 {!backgrounds.length&&<p>同梱の背景画像はありません。背景色や画像要素を利用できます。</p>}
                 <div className="background-grid">
                   {backgrounds.map((id) => (
-                    <button type="button" key={id} aria-label={`背景テンプレート ${backgroundLabels[id] || `背景 ${id.replace("bg_", "")}`}`} aria-pressed={draft.backgroundTemplate === id} onClick={() => changeDraft("backgroundTemplate", id)}>
+                    <button type="button" key={id} aria-label={`背景テンプレート ${backgroundLabels[id] || `背景 ${id.replace("bg_", "")}`}`} aria-pressed={draft.backgroundTemplate === id} onClick={() => changeBackground({template:id})}>
                       <img src={`/backgrounds/${id}.png`} alt="" loading="lazy" />
                       <span>{backgroundLabels[id] || `背景 ${id.replace("bg_", "")}`}{draft.backgroundTemplate === id ? " · 選択中" : ""}</span>
                     </button>
                   ))}
                 </div>
-                <button type="button" className="background-reset" disabled={!draft.backgroundTemplate || draft.backgroundTemplate === "none"} onClick={() => changeDraft("backgroundTemplate", "none")}>テンプレートを解除</button>
+                <button type="button" className="background-reset" disabled={!draft.backgroundOriginal && (!draft.backgroundTemplate || draft.backgroundTemplate === "none")} onClick={() => changeBackground(null)}>元の背景に戻す</button>
               </section>
               <section className="placement-fields">
                 <h3>要素の配置・サイズ</h3>
