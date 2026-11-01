@@ -12,7 +12,7 @@ export function ObjectTable({object:o,onCell,onBegin}:{object:SlideObject;onCell
    onDoubleClick={e=>{if(onCell)e.stopPropagation();}}
    onFocus={()=>onBegin?.()}
    onBlur={e=>{if(!onCell)return;const text=e.currentTarget.innerText;if(text.length>2000){e.currentTarget.innerText=value;return;}if(text!==value)onCell(i,j,text);}}
-   onKeyDown={e=>{if(!onCell)return;e.stopPropagation();if(e.key==='Escape'){e.preventDefault();e.currentTarget.innerText=value;e.currentTarget.blur();}else if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();e.currentTarget.blur();}}}
+   onKeyDown={e=>{if(!onCell)return;e.stopPropagation();if(e.nativeEvent.isComposing||e.keyCode===229)return;if(e.key==='Escape'){e.preventDefault();e.currentTarget.innerText=value;e.currentTarget.blur();}else if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();e.currentTarget.blur();}}}
    data-table-cell={`${i}:${j}`} rowSpan={cell.rowSpan} colSpan={cell.colSpan} style={{fontFamily:style.fontFamily,fontSize:`calc(${(style.fontSize??16)/12}cqw * var(--table-text-scale, 1))`,fontWeight:style.bold?700:400,fontStyle:style.italic?'italic':undefined,textDecoration:style.underline?'underline':undefined,color:style.color,textAlign:style.align??'left',lineHeight:style.lineHeight??1.2,background:cell.fill??'transparent',padding:(cell.margin??[8,8,8,8]).map(n=>`${n/16}cqw`).join(' '),verticalAlign:cell.verticalAlign==='center'?'middle':cell.verticalAlign??'top',borderTop:border?.[0],borderRight:border?.[1],borderBottom:border?.[2],borderLeft:border?.[3]}}>{value}</td>;
  })}</tr>)}</tbody></table>;
 }
