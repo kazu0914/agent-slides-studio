@@ -44,7 +44,19 @@ export function CanvasText({
     }
   }, [value, editable]);
 
-  useLayoutEffect(()=>{const el=element.current;if(!el)return;const check=()=>{const box=el.getBoundingClientRect(),slide=el.closest('[data-testid="slide-canvas"]')?.getBoundingClientRect();setOverflow(el.scrollWidth>el.clientWidth+2||el.scrollHeight>el.clientHeight+2||!!(slide&&(box.right>slide.right+2||box.bottom>slide.bottom+2||box.left<slide.left-2||box.top<slide.top-2)));};check();const ro=new ResizeObserver(check);ro.observe(el);return()=>ro.disconnect();},[value,style]);
+  useLayoutEffect(()=>{
+    const el=element.current;if(!el)return;let active=true;
+    const check=()=>{
+      if(!active)return;
+      // PPTX取り込み時に非表示となるテンプレート要素は、枠外の文字として数えない。
+      const box=el.getBoundingClientRect();if(!el.getClientRects().length||!box.width||!box.height){setOverflow(false);return;}
+      const slide=el.closest('[data-testid="slide-canvas"]')?.getBoundingClientRect();
+      setOverflow(el.scrollWidth>el.clientWidth+2||el.scrollHeight>el.clientHeight+2||!!(slide&&(box.right>slide.right+2||box.bottom>slide.bottom+2||box.left<slide.left-2||box.top<slide.top-2)));
+    };
+    check();const ro=new ResizeObserver(check);ro.observe(el);el.addEventListener('input',check);
+    void document.fonts.ready.then(check);document.fonts.addEventListener('loadingdone',check);
+    return()=>{active=false;ro.disconnect();el.removeEventListener('input',check);document.fonts.removeEventListener('loadingdone',check);};
+  },[value,style]);
   function publish(target: HTMLElement) {
     const text = target.innerText.replace(/\r\n?/g, "\n");
     const limited = text.slice(0, limit).replace(/[\uD800-\uDBFF]$/, "");

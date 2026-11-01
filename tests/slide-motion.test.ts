@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {slideSchema} from '../lib/model';
+import {motionLooks,motionTiming,slideMotionSchema} from '../lib/slide-motion';
+const slide={id:'motion',title:'タイトル',body:'本文',eyebrow:'',layout:'statement',theme:'white',animation:'none',notes:'',items:[],strokes:[]};
+assert.equal(slideSchema.parse(slide).motion,undefined);
+for(const look of motionLooks)assert(slideSchema.safeParse({...slide,motion:look.value}).success);
+assert(!slideMotionSchema.safeParse({entrance:'flash',transition:'push'}).success);
+const m=motionLooks[1].value;
+assert(motionTiming({...m,tempo:'fast'}).duration<motionTiming({...m,tempo:'slow'}).duration);
+assert(motionTiming({...m,intensity:'gentle'}).distance<motionTiming({...m,intensity:'bold'}).distance);
+console.log('Slide motion presets, legacy compatibility and bounded settings PASS');

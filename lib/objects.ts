@@ -1,7 +1,24 @@
 import {z} from 'zod';
+import {flowSchema,makeFlow} from './flow-diagram';
 export const fontFamilies=['Hiragino Sans','Noto Sans JP','Arial','Georgia','Times New Roman','Courier New'] as const;
 export const textStyleSchema=z.object({fontFamily:z.enum(fontFamilies).optional(),fontSize:z.number().min(6).max(160).optional(),bold:z.boolean().optional(),italic:z.boolean().optional(),underline:z.boolean().optional(),color:z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),align:z.enum(['left','center','right']).optional(),lineHeight:z.number().min(.8).max(3).optional()});
 export type TextStyle=z.infer<typeof textStyleSchema>;
+const tableBorderSchema=z.object({color:z.string().regex(/^#[0-9a-fA-F]{6}$/),width:z.number().min(0).max(100),dash:z.boolean().optional()});
+export const tableCellFormatSchema=z.object({
+ style:textStyleSchema.optional(),fill:z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+ margin:z.tuple([z.number().min(0).max(400),z.number().min(0).max(400),z.number().min(0).max(400),z.number().min(0).max(400)]).optional(),
+ borders:z.tuple([tableBorderSchema,tableBorderSchema,tableBorderSchema,tableBorderSchema]).optional(),
+ verticalAlign:z.enum(['top','center','bottom']).optional(),
+ rowSpan:z.number().int().min(1).max(30).optional(),colSpan:z.number().int().min(1).max(12).optional(),
+});
+export const tableFormatSchema=z.object({
+ columnWidths:z.array(z.number().positive().max(3200)).min(1).max(12),
+ rowHeights:z.array(z.number().positive().max(1800)).min(1).max(30),
+ cells:z.array(z.array(tableCellFormatSchema).min(1).max(12)).min(1).max(30),
+ fit:z.enum(['none','shrink']).default('none'),
+});
+export type TableFormat=z.infer<typeof tableFormatSchema>;
+export type TableCellFormat=z.infer<typeof tableCellFormatSchema>;
 export const chartFormatSchema=z.object({
  colors:z.array(z.string().regex(/^#[0-9a-fA-F]{6}$/)).max(30).optional(),
  showLegend:z.boolean().optional(),showValue:z.boolean().optional(),
@@ -16,20 +33,28 @@ export const objectSchema=z.object({
  x:z.number().min(-1600).max(3200),y:z.number().min(-900).max(1800),w:z.number().min(1).max(3200),h:z.number().min(1).max(1800),
  rotation:z.number().min(-360).max(360).default(0),opacity:z.number().min(0).max(1).default(1),locked:z.boolean().default(false),hidden:z.boolean().default(false),groupId:z.string().max(80).optional(),
  href:z.string().max(2048).refine(safeLink,'https:// で始まるURLを入力してください').optional(),
+ flow:flowSchema.optional(),
  customSvg:z.string().max(100000).optional(),
  appearAt:z.number().int().min(0).max(100).optional(),
  fillOpacity:z.number().min(0).max(1).optional(),strokeWidth:z.number().min(0).max(100).optional(),verticalAlign:z.enum(['top','center','bottom']).optional(),
  text:z.string().max(12000).default(''),style:textStyleSchema.default({}),
+ textLayout:z.object({wrap:z.boolean(),autoFit:z.enum(['none','shrink','resize']),overflowX:z.enum(['visible','clip']),overflowY:z.enum(['visible','clip'])}).optional(),
  src:z.string().regex(/^\/api\/assets\/[a-f0-9-]+\.(png|jpg|webp)$/).optional(),fit:z.enum(['contain','cover']).default('contain'),cropX:z.number().min(0).max(100).default(50),cropY:z.number().min(0).max(100).default(50),
  shape:z.enum(['rectangle','ellipse','arrow','line']).default('rectangle'),fill:z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#e8efff'),stroke:z.string().regex(/^#[0-9a-fA-F]{6}$/).default('#2454ef'),
  cells:z.array(z.array(z.string().max(2000)).min(1).max(12)).max(30).default([]),
+ tableFormat:tableFormatSchema.optional(),
  chartFormat:chartFormatSchema.optional(),
- chartType:z.enum(['bar','line','pie']).default('bar'),motion:z.enum(['holo-cards','holo-database','holo-server','holo-target','holo-funnel','holo-pyramid','holo-solar','holo-gears','holo-platform','holo-honeycomb','holo-equalizer','holo-prism','holo-chart','holo-network','holo-flow','holo-grid','holo-document','holo-shield','holo-cloud','holo-compare','holo-timeline','orbit','arrow','cube','globe','rings','helix','crystal','wave','particles','pulse','bars']).default('cube'),duration:z.number().min(2).max(120).default(16)
-}).superRefine((o,c)=>{if(o.kind==='image'&&!o.src)c.addIssue({code:'custom',message:'画像がありません'});if((o.kind==='table'||o.kind==='chart')&&(!o.cells.length||o.cells.some(r=>r.length!==o.cells[0].length)))c.addIssue({code:'custom',message:'表の列数を揃えてください'});if(o.kind==='chart'&&(o.cells.length<2||o.cells[0].length<2||o.cells.slice(1).some(r=>r.slice(1).some(v=>!v.trim()||!Number.isFinite(Number(v))))))c.addIssue({code:'custom',message:'グラフの2行目以降には数値を入力してください'});});
+ chartType:z.enum(['bar','line','pie']).default('bar'),motion:z.enum(['flow','holo-cards','holo-database','holo-server','holo-target','holo-funnel','holo-pyramid','holo-solar','holo-gears','holo-platform','holo-honeycomb','holo-equalizer','holo-prism','holo-chart','holo-network','holo-flow','holo-grid','holo-document','holo-shield','holo-cloud','holo-compare','holo-timeline','orbit','arrow','cube','globe','rings','helix','crystal','wave','particles','pulse','bars']).default('cube'),duration:z.number().min(2).max(120).default(16)
+}).superRefine((o,c)=>{if(o.kind==='motion'&&o.motion==='flow'&&(!o.flow||o.customSvg))c.addIssue({code:'custom',message:'フローには箱と接続を指定し、customSvgは省略してください'});if(o.kind==='image'&&!o.src)c.addIssue({code:'custom',message:'画像がありません'});if((o.kind==='table'||o.kind==='chart')&&(!o.cells.length||o.cells.some(r=>r.length!==o.cells[0].length)))c.addIssue({code:'custom',message:'表の列数を揃えてください'});if(o.tableFormat){const f=o.tableFormat;if(f.columnWidths.length!==o.cells[0]?.length||f.rowHeights.length!==o.cells.length||f.cells.length!==o.cells.length||f.cells.some((r,i)=>r.length!==o.cells[i]?.length))c.addIssue({code:'custom',message:'表の書式と行・列の数を揃えてください'});f.cells.forEach((r,i)=>r.forEach((cell,j)=>{if(i+(cell.rowSpan??1)>o.cells.length||j+(cell.colSpan??1)>(o.cells[i]?.length??0))c.addIssue({code:'custom',message:'結合セルが表の範囲を超えています'});}));}if(o.kind==='chart'&&(o.cells.length<2||o.cells[0].length<2||o.cells.slice(1).some(r=>r.slice(1).some(v=>!v.trim()||!Number.isFinite(Number(v))))))c.addIssue({code:'custom',message:'グラフの2行目以降には数値を入力してください'});});
 export type SlideObject=z.infer<typeof objectSchema>;
 export function makeObject(kind:SlideObject['kind']):SlideObject {return objectSchema.parse({id:crypto.randomUUID(),name:{text:'テキスト',image:'画像',shape:'図形',table:'表',chart:'グラフ',motion:'アニメーション'}[kind],kind,x:320,y:230,w:kind==='text'?700:600,h:kind==='text'?160:360,text:kind==='text'?'テキストを入力':'',style:{fontSize:kind==='text'?32:16,color:'#17233b'},fill:kind==='motion'?'#2454ef':'#e8efff',...(kind==='table'||kind==='chart'?{cells:[['項目','値'],['A','0'],['B','0'],['C','0']]}:{})});}
 export function parseGrid(value:string):string[][]{
- const sep=value.includes('\t')?'\t':',';const rows:string[][]=[];let row:string[]=[],field='',quoted=false;
+ // 引用符の中のタブを区切り文字と誤認せず、Excel由来のBOMも除く。
+ value=value.replace(/^\uFEFF/,'');let inQuote=false,hasTab=false;
+ for(let i=0;i<value.length;i++){const ch=value[i];if(ch==='"'){if(inQuote&&value[i+1]==='"'){i++;continue;}inQuote=!inQuote;}else if(!inQuote){if(ch==='\t')hasTab=true;if(ch==='\n'||ch==='\r')break;}}
+ const sep=hasTab?'\t':',';const rows:string[][]=[];let row:string[]=[],field='',quoted=false;
  for(let i=0;i<value.length;i++){const ch=value[i];if(ch==='"'){if(quoted&&value[i+1]==='"'){field+='"';i++;}else quoted=!quoted;}else if(ch===sep&&!quoted){row.push(field);field='';}else if((ch==='\n'||ch==='\r')&&!quoted){if(ch==='\r'&&value[i+1]==='\n')i++;row.push(field);rows.push(row);row=[];field='';}else field+=ch;}
  if(quoted)throw Error('CSVの引用符が閉じられていません');if(field||row.length){row.push(field);rows.push(row);}if(!rows.length)throw Error('データを入力してください');const width=Math.max(...rows.map(r=>r.length));if(width>12||rows.length>30)throw Error('表は30行・12列までです');return rows.map(r=>[...r,...Array(width-r.length).fill('')]);
 }
+
+export function makeFlowObject(kind:'serial'|'branch'):SlideObject{return objectSchema.parse({...makeObject('motion'),name:kind==='serial'?'工程フロー':'分岐フロー',motion:'flow',flow:makeFlow(kind),x:120,y:280,w:1360,h:550,duration:6});}

@@ -1,4 +1,7 @@
+import {tableLayoutTest} from './table-layout-e2e.mjs';
+import {textLayoutTest} from './text-layout-e2e.mjs';
 import {codexChatTest} from './codex-chat-e2e.mjs';
+import {slideMotionTest} from './slide-motion-e2e.mjs';
 import {artworkDefaultTest} from './artwork-default-e2e.mjs';
 import {sideImageTest} from './side-image-e2e.mjs';
 import {linksTest} from './links-e2e.mjs';
@@ -128,5 +131,8 @@ await dragGuidesTest(browser,api,origin,initial);
 await fontSizeTest(browser,api,origin,initial);
 await linksTest(browser,api,origin,initial);
 await sideImageTest(browser,api,origin,initial);
+await textLayoutTest(browser,api,origin,initial);
+await tableLayoutTest(browser,api,origin,initial);
 await artworkDefaultTest(browser,api,origin,initial);
+await slideMotionTest(browser,api,origin,initial);
 console.log('PASS: sample download/import, browser text editing/save, presentation');console.log('PASS: clean startup, no private backgrounds, Codex absent/manual edit, save/restart, trash restore, empty-workspace backup restore incl images/history/chat, PDF/PPTX');}finally{await browser?.close();await stop();for(const d of dirs)await rm(d,{recursive:true,force:true});}

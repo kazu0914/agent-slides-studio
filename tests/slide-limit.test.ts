@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {MAX_SLIDES} from '../lib/limits.mjs';
+import {deckSchema,proposalSchema,applyProposal,initialDeck} from '../lib/model';
+import {importPptx} from '../local/pptx-import';
+import {pptxWithSlides} from './slide-limit-fixture.mjs';
+import {generateCodexProposal} from '../local/codex-proposal';
+assert.equal(MAX_SLIDES,500);
+const make=(n:number)=>({...initialDeck,slides:Array.from({length:n},(_,i)=>({...initialDeck.slides[0],id:`limit-${i}`,title:`スライド ${i+1}`}))});
+for(const n of [1,50,150,499,500])assert.equal(deckSchema.parse(make(n)).slides.length,n);
+assert.throws(()=>deckSchema.parse(make(501)),/500枚/);
+const deck=deckSchema.parse(make(500));const patches=deck.slides.map(s=>({slideId:s.id,changes:{body:'500枚の変更を検証'}}));const proposal={reason:'全ページを更新',patches};
+assert.equal(applyProposal(deck,proposal).slides.at(-1)?.body,'500枚の変更を検証');assert.equal(proposalSchema.parse(proposal).patches.length,500);
+assert.throws(()=>proposalSchema.parse({...proposal,patches:[...patches,patches[0]]}),/500件/);
+const generated=await generateCodexProposal('全ページを更新',deck,deck.slides[0].id,[],{},async()=>({answer:'テスト用の変更案',proposalJson:JSON.stringify(proposal),webSearchCount:0}));
+assert(generated.proposal);assert.equal(applyProposal(deck,generated.proposal).slides.at(-1)?.body,'500枚の変更を検証');
+const imported=importPptx(pptxWithSlides(500),'500枚.pptx',()=>{throw Error('画像なし');});assert.equal(imported.deck.slides.length,500);assert.equal(imported.deck.slides[499].objects?.[0].text,'検証スライド 500');
+assert.throws(()=>importPptx(pptxWithSlides(501),'501枚.pptx',()=>''),/1〜500枚/);
+console.log('PASS: 1/50/150/499/500 slide schemas, 501 rejected, 500 AI patches validated, 500 PPTX pages imported in order');

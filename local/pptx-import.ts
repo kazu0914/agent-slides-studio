@@ -1,3 +1,4 @@
+import {MAX_SLIDES} from '../lib/limits.mjs';
 import {DOMParser, type Element} from '@xmldom/xmldom';
 import {unzipSync} from 'fflate';
 import {posix} from 'node:path';
@@ -23,7 +24,7 @@ export function importPptx(bytes:Uint8Array,name:string,saveImage:(data:string)=
  const presentation=xml('ppt/presentation.xml'),size=child(presentation,'sldSz');const sw=num(size,'cx'),sh=num(size,'cy');if(sw<=0||sh<=0)throw Error('スライドサイズを読み取れません');
  const scale=Math.min(1600/sw,900/sh),ox=(1600-sw*scale)/2,oy=(900-sh*scale)/2;
  const warnings=new Set<string>();if(Math.abs(sw/sh-16/9)>.01)warnings.add('元の縦横比を保って16:9の中央に配置しています。');
- const refs=rels('ppt/presentation.xml');const ids=children(child(presentation,'sldIdLst'),'sldId');if(!ids.length||ids.length>50)throw Error('PPTXは1〜50枚に対応しています');
+ const refs=rels('ppt/presentation.xml');const ids=children(child(presentation,'sldIdLst'),'sldId');if(!ids.length||ids.length>MAX_SLIDES)throw Error(`PPTXは1〜${MAX_SLIDES}枚に対応しています`);
  const media=new Map<string,string>();
  const slides=ids.map((id,index)=>{
   const path=refs.find(r=>r.id===attr(id,'r:id'))?.path;if(!path)throw Error('スライドの参照が不正です');const root=xml(path),cs=child(root,'cSld'),tree=child(cs,'spTree'),relationships=rels(path);const objects:SlideObject[]=[];
@@ -73,7 +74,30 @@ export function importPptx(bytes:Uint8Array,name:string,saveImage:(data:string)=
       add({...box,chartFormat,name:objectName,kind:'chart',chartType:kind==='lineChart'?'line':kind==='pieChart'?'pie':'bar',cells:[['項目',...data.map(s=>s.name)],...cats.map((label,i)=>[label,...data.map(s=>s.values![i])])],style:{color:'#17233b'}});
       continue;
      }
-     const tbl=descendants(node,'tbl')[0];if(tbl){const cells=children(tbl,'tr').map(row=>children(row,'tc').map(c=>text(child(c,'txBody'))));add({...box,name:objectName,kind:'table',cells,style:{fontSize:16},fill:'#e8efff'});warn('表の罫線・結合・書式は標準スタイルに置き換えています。');}else warn('グラフ・SmartArt・埋め込みオブジェクトは未対応です。');continue;
+     const tbl=descendants(node,'tbl')[0];
+     if(tbl){
+      const rows=children(tbl,'tr'),columns=children(child(tbl,'tblGrid'),'gridCol');
+      const cells=rows.map(row=>children(row,'tc').map(c=>text(child(c,'txBody'))));
+      if(!rows.length||!columns.length||cells.some(r=>r.length!==columns.length))throw Error(`${index+1}枚目: 表の行・列の構造を読み取れません。`);
+      const formats=rows.map(row=>children(row,'tc').map(tc=>{
+       const body=child(tc,'txBody'),p=children(body,'p')[0],pp=child(p,'pPr'),rp=child(child(p,'r'),'rPr')||child(pp,'defRPr')||child(p,'endParaRPr'),pr=child(tc,'tcPr');
+       const family=attr(child(rp,'ea'),'typeface')||attr(child(rp,'latin'),'typeface')||'Arial';
+       const font=fontFamilies.includes(family as typeof fontFamilies[number])?family:'Hiragino Sans';
+       if(font!==family)warn(`表のフォント「${family}」をHiragino Sansに置き換えました。`);
+       if(new Set(descendants(body,'rPr').map(r=>r.toString())).size>1)warn('同じ表セル内の混在書式は先頭の書式に統一しています。');
+       const spacing=child(child(pp,'lnSpc'),'spcPct'),fixedSpacing=child(child(pp,'lnSpc'),'spcPts');
+       const merged=['1','true'].includes(attr(tc,'hMerge'))||['1','true'].includes(attr(tc,'vMerge'));
+       return {style:{fontFamily:font,fontSize:Math.max(6,Math.min(160,num(rp,'sz',1800)/100*12700*sy*.75)),bold:['1','true'].includes(attr(rp,'b')),italic:['1','true'].includes(attr(rp,'i')),underline:!!attr(rp,'u')&&attr(rp,'u')!=='none',color:color(child(rp,'solidFill')),align:attr(pp,'algn')==='ctr'?'center':attr(pp,'algn')==='r'?'right':'left',lineHeight:Math.max(.8,Math.min(3,spacing?num(spacing,'val',120000)/100000:fixedSpacing?num(fixedSpacing,'val')/num(rp,'sz',1800):1.2))},
+        fill:child(pr,'solidFill')?color(child(pr,'solidFill'),'#ffffff'):undefined,
+        margin:[num(pr,'marT',45720)*sy,num(pr,'marR',91440)*sx,num(pr,'marB',45720)*sy,num(pr,'marL',91440)*sx],
+        verticalAlign:attr(pr,'anchor')==='ctr'?'center':attr(pr,'anchor')==='b'?'bottom':'top',
+        borders:['lnT','lnR','lnB','lnL'].map(key=>{const line=child(pr,key);return {color:color(child(line,'solidFill'),'#94a3b8'),width:!line||child(line,'noFill')?0:num(line,'w',12700)*Math.min(sx,sy),dash:!!child(line,'prstDash')&&attr(child(line,'prstDash'),'val')!=='solid'};}),
+        rowSpan:merged?1:num(tc,'rowSpan',1),colSpan:merged?1:num(tc,'gridSpan',1)};
+      }));
+      const tableFormat={columnWidths:columns.map(c=>Math.max(1,num(c,'w')*sx)),rowHeights:rows.map(r=>Math.max(1,num(r,'h')*sy)),cells:formats,fit:'none'};
+      add({...box,name:objectName,kind:'table',cells,tableFormat,style:formats[1]?.[0]?.style||formats[0][0].style,fill:formats[0][0].fill||'#e8efff'});
+      if(child(child(tbl,'tblPr'),'tableStyleId'))warn('表のテーマ書式は、セルに直接指定された書式を優先して取り込みます。');
+     }else warn('グラフ・SmartArt・埋め込みオブジェクトは未対応です。');continue;
     }
     const txBody=child(node,'txBody'),value=text(txBody),geometry=attr(child(sp,'prstGeom'),'prst','rect');
     if(fill||kind==='cxnSp'||(line&&!child(line,'noFill'))){const shape=geometry==='ellipse'?'ellipse':geometry==='line'||kind==='cxnSp'?'line':geometry==='rightArrow'?'arrow':'rectangle';if(!['rect','roundRect','ellipse','line','rightArrow'].includes(geometry)||child(sp,'custGeom'))warn('一部の図形を四角形に置き換えています。');add({...box,name:objectName,kind:'shape',shape,fill:color(fill,'#ffffff'),fillOpacity:fill?num(child(child(fill,'srgbClr'),'alpha'),'val',100000)/100000:0,stroke:color(child(line,'solidFill'),'#17233b'),strokeWidth:line&&!child(line,'noFill')?num(line,'w',12700)*scale:0});}
@@ -81,7 +105,12 @@ export function importPptx(bytes:Uint8Array,name:string,saveImage:(data:string)=
      const p=children(txBody,'p')[0],pp=child(p,'pPr'),rp=child(child(p,'r'),'rPr')||child(pp,'defRPr');const body=child(txBody,'bodyPr');const originalFont=attr(child(rp,'ea'),'typeface')||attr(child(rp,'latin'),'typeface')||'Arial';const font=fontFamilies.includes(originalFont as typeof fontFamilies[number])?originalFont:'Hiragino Sans';if(font!==originalFont)warn(`フォント「${originalFont}」をHiragino Sansに置き換えました。`);
      const formats=new Set(descendants(txBody,'rPr').map(r=>r.toString()));if(formats.size>1)warn('同じテキスト枠内の混在書式は先頭の書式に統一しています。');
      const left=num(body,'lIns',91440)*sx,right=num(body,'rIns',91440)*sx,top=num(body,'tIns',45720)*sy,bottom=num(body,'bIns',45720)*sy;
-     add({...box,x:box.x+left,y:box.y+top,w:Math.max(1,box.w-left-right),h:Math.max(1,box.h-top-bottom),name:value.slice(0,60),kind:'text',text:value,verticalAlign:attr(body,'anchor')==='ctr'?'center':attr(body,'anchor')==='b'?'bottom':'top',style:{fontFamily:font,fontSize:Math.max(6,Math.min(160,num(rp,'sz',1800)/100*12700*scale*.75)),bold:attr(rp,'b')==='1',italic:attr(rp,'i')==='1',underline:!!attr(rp,'u')&&attr(rp,'u')!=='none',color:color(child(rp,'solidFill')),align:attr(pp,'algn')==='ctr'?'center':attr(pp,'algn')==='r'?'right':'left',lineHeight:1.2}});
+     const normalFit=child(body,'normAutofit');
+     const percentage=(el:Element|undefined,key:string,fallback:number)=>{const raw=attr(el,key);if(!raw)return fallback;const value=raw.endsWith('%')?parseFloat(raw)/100:Number(raw)/100000;return Number.isFinite(value)?Math.max(0,Math.min(1,value)):fallback;};
+     const fontScale=percentage(normalFit,'fontScale',1),spacingReduction=percentage(normalFit,'lnSpcReduction',0);
+     const textLayout={wrap:attr(body,'wrap')!=='none',autoFit:normalFit?'shrink':child(body,'spAutoFit')?'resize':'none',overflowX:attr(body,'horzOverflow')==='clip'?'clip':'visible',overflowY:['clip','ellipsis'].includes(attr(body,'vertOverflow'))?'clip':'visible'};
+     if(attr(body,'vertOverflow')==='ellipsis')warn('文字の省略記号はクリップ表示に置き換えています。');
+     add({...box,x:box.x+left,y:box.y+top,w:Math.max(1,box.w-left-right),h:Math.max(1,box.h-top-bottom),name:value.slice(0,60),kind:'text',text:value,textLayout,verticalAlign:attr(body,'anchor')==='ctr'?'center':attr(body,'anchor')==='b'?'bottom':'top',style:{fontFamily:font,fontSize:Math.max(6,Math.min(160,num(rp,'sz',1800)/100*12700*scale*.75*fontScale)),bold:attr(rp,'b')==='1',italic:attr(rp,'i')==='1',underline:!!attr(rp,'u')&&attr(rp,'u')!=='none',color:color(child(rp,'solidFill')),align:attr(pp,'algn')==='ctr'?'center':attr(pp,'algn')==='r'?'right':'left',lineHeight:Math.max(.8,1.2*(1-spacingReduction))}});
     }
    }
   };

@@ -1,3 +1,4 @@
+import {MAX_SLIDES} from '../lib/limits.mjs';
 import { createServer } from "node:http";
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync, mkdirSync, existsSync } from "node:fs";
@@ -360,7 +361,7 @@ createServer(async (req, res) => {
           e instanceof AppError
             ? e.message
             : e instanceof z.ZodError
-              ? "入力内容の形式を確認してください。"
+              ? e.issues.find(issue=>issue.code==="too_big"&&issue.origin==="array"&&issue.maximum===MAX_SLIDES)?.message || "入力内容の形式を確認してください。"
               : e instanceof Error
                 ? e.message
                 : "処理に失敗しました。",
