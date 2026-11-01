@@ -1,8 +1,12 @@
 'use client';
-import {useRef,useState,useLayoutEffect,type CSSProperties} from 'react';
+import {resizeImage} from '@/lib/image-resize';
+import {useRef,useState,useLayoutEffect,useEffect,type CSSProperties} from 'react';
 import {type SlideObject,type TextStyle,safeLink} from '@/lib/objects';
 import {ImportedChart} from './imported-chart';
+import {FlowDiagram} from './flow-diagram';
 import {MotionArt} from './motion-art';
+import {textLayout} from '@/lib/text-layout';
+import {ObjectTable} from './object-table';
 export function textCss(s:TextStyle={}):CSSProperties{return {fontFamily:s.fontFamily,fontSize:s.fontSize?`${s.fontSize/12}cqw`:undefined,fontWeight:s.bold===undefined?undefined:s.bold?700:400,fontStyle:s.italic?'italic':undefined,textDecoration:s.underline?'underline':undefined,color:s.color,textAlign:s.align,lineHeight:s.lineHeight};}
 export const chartColors=['#2454ef','#13a89e','#ef8244','#b26de3','#e0507a','#71819a'];
 export function ObjectChart({object:o}:{object:SlideObject}){
@@ -17,35 +21,82 @@ export function ObjectChart({object:o}:{object:SlideObject}){
  </>}
  </svg>;
 }
-function ObjectBody({object:o,editing,inspect=false,linksActive=false,onText}:{object:SlideObject;editing:boolean;inspect?:boolean;linksActive?:boolean;onText:(text:string)=>void}){
+function ObjectBody({object:o,editing,inspect=false,imported=false,linksActive=false,flowEnabled=false,playing=true,onText,onCell,onCellBegin}:{object:SlideObject;editing:boolean;inspect?:boolean;imported?:boolean;linksActive?:boolean;flowEnabled?:boolean;playing?:boolean;onText:(text:string)=>void;onCell?:(row:number,col:number,text:string)=>void;onCellBegin?:()=>void}){
  const ref=useRef<HTMLDivElement>(null);const [overflow,setOverflow]=useState(false);
+ const layout=textLayout(o,imported);
  // 編集モードへの切り替え時に入力先も移し、Deleteが要素削除に流れないようにする。
  useLayoutEffect(()=>{if(editing)ref.current?.querySelector<HTMLElement>('[data-object-text]')?.focus();},[editing]);
- useLayoutEffect(()=>{const el=ref.current;if(!el)return;if(o.kind!=='text'&&o.kind!=='table'){setOverflow(false);return;}const measure=()=>setOverflow(el.scrollHeight>el.clientHeight+2||el.scrollWidth>el.clientWidth+2);measure();const ro=new ResizeObserver(measure);ro.observe(el);return()=>ro.disconnect();},[o]);
- return <div ref={ref} data-text-overflow={overflow?"true":undefined} className={`free-object-body ${overflow&&inspect?'text-overflow':''}`} style={{...textCss(o.style),width:'100%',height:'100%',overflow:'hidden',...(o.kind==='text'?{display:'flex',flexDirection:'column',justifyContent:o.verticalAlign==='center'?'center':o.verticalAlign==='bottom'?'flex-end':'flex-start'}:{})}}>
- {o.kind==='text'&&<div data-object-text contentEditable={editing?'plaintext-only':false} suppressContentEditableWarning style={{width:'100%',flexShrink:0,whiteSpace:'pre-wrap',outline:0}} onBlur={e=>onText(e.currentTarget.innerText)} onKeyDown={e=>{if(editing)e.stopPropagation();}}>{o.href&&safeLink(o.href)&&!editing?<a href={o.href} target="_blank" rel="noopener noreferrer" style={{color:'inherit',textDecoration:'underline',pointerEvents:linksActive?'auto':'none'}} tabIndex={linksActive?0:-1} onPointerDown={e=>{if(linksActive)e.stopPropagation();}} onClick={e=>{e.stopPropagation();if(!linksActive)e.preventDefault();}}>{o.text}</a>:o.text}</div>}
+ useLayoutEffect(()=>{
+  const el=ref.current;if(!el)return;if(o.kind!=='text'&&o.kind!=='table'){setOverflow(false);return;}
+  const policy=textLayout(o,imported),content=el.querySelector<HTMLElement>('[data-object-text]');let active=true;
+  const measure=()=>{
+   if(!active)return;
+   if(content){
+    content.style.fontSize='100%';
+    // 保存済みの縮小指定を使い、ブラウザーのフォント幅の差も実測で調整する。
+    if(policy.autoFit==='shrink'){
+     const fits=()=>content.scrollWidth<=el.clientWidth+.5&&content.getBoundingClientRect().height<=el.getBoundingClientRect().height+.5;
+     if(!fits()){let low=.01,high=1;for(let i=0;i<12;i++){const mid=(low+high)/2;content.style.fontSize=`${mid*100}%`;if(fits())low=mid;else high=mid;}content.style.fontSize=`${low*100}%`;}
+    }
+   }
+   if(o.kind==='table'){
+    el.style.setProperty('--table-text-scale','1');
+    if(o.tableFormat?.fit==='shrink'){
+     const fits=()=>el.scrollHeight<=el.clientHeight+1&&el.scrollWidth<=el.clientWidth+1;
+     if(!fits()){const smallest=Math.min(...o.cells.flatMap((row,i)=>row.map((_,j)=>o.tableFormat?.cells[i]?.[j]?.style?.fontSize??o.style.fontSize??16)));let low=Math.min(1,6/smallest),high=1;for(let i=0;i<12;i++){const mid=(low+high)/2;el.style.setProperty('--table-text-scale',String(mid));if(fits())low=mid;else high=mid;}el.style.setProperty('--table-text-scale',String(low));}
+    }
+   }
+   const clippedX=o.kind==='table'||policy.overflowX==='clip',clippedY=o.kind==='table'||policy.overflowY==='clip';
+   setOverflow((clippedX&&el.scrollWidth>el.clientWidth+2)||(clippedY&&el.scrollHeight>el.clientHeight+2));
+  };
+  measure();const ro=new ResizeObserver(measure);ro.observe(el);el.addEventListener('input',measure);
+  void document.fonts.ready.then(measure);document.fonts.addEventListener('loadingdone',measure);
+  return()=>{active=false;ro.disconnect();el.removeEventListener('input',measure);document.fonts.removeEventListener('loadingdone',measure);};
+ },[o,imported]);
+ return <><div ref={ref} data-text-overflow={overflow?"true":undefined} className={`free-object-body ${overflow&&inspect?'text-overflow':''}`} style={{...textCss(o.style),width:'100%',height:'100%',overflow:'hidden',...(o.kind==='text'?{overflowX:layout.overflowX,overflowY:layout.overflowY,display:'flex',flexDirection:'column',justifyContent:o.verticalAlign==='center'?'center':o.verticalAlign==='bottom'?'flex-end':'flex-start'}:{})}}>
+ {o.kind==='text'&&<div data-object-text contentEditable={editing?'plaintext-only':false} suppressContentEditableWarning style={{width:'100%',flexShrink:0,whiteSpace:layout.wrap?'pre-wrap':'pre',overflowWrap:imported||o.textLayout?'normal':'anywhere',fontSize:'100%',outline:0}} onBlur={e=>{if(editing)onText(e.currentTarget.innerText);}} onKeyDown={e=>{if(editing)e.stopPropagation();}}>{o.href&&safeLink(o.href)&&!editing?<a href={o.href} target="_blank" rel="noopener noreferrer" style={{color:'inherit',textDecoration:'underline',pointerEvents:linksActive?'auto':'none'}} tabIndex={linksActive?0:-1} onPointerDown={e=>{if(linksActive)e.stopPropagation();}} onClick={e=>{e.stopPropagation();if(!linksActive)e.preventDefault();}}>{o.text}</a>:o.text}</div>}
  {o.kind==='image'&&<img alt={o.name} draggable={false} src={o.src} style={{width:'100%',height:'100%',objectFit:o.fit,objectPosition:`${o.cropX}% ${o.cropY}%`}}/>}
  {o.kind==='shape'&&<svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" style={{overflow:'visible'}}><g fillOpacity={o.fillOpacity ?? 1} strokeWidth={o.strokeWidth===undefined?1:o.strokeWidth/Math.max(o.w,o.h)*100}>{o.shape==='ellipse'?<ellipse cx="50" cy="50" rx="48" ry="48" fill={o.fill} stroke={o.stroke}/>:o.shape==='line'?<line x1="0" y1="50" x2="100" y2="50" strokeWidth={o.strokeWidth===undefined?2:o.strokeWidth/o.h*100} stroke={o.stroke}/>:o.shape==='arrow'?<path d="M0 35H65V10L100 50 65 90V65H0Z" fill={o.fill} stroke={o.stroke}/>:<rect x="1" y="1" width="98" height="98" rx="0" fill={o.fill} stroke={o.stroke}/>}</g></svg>}
- {o.kind==='table'&&<table className="object-table" style={{fontSize:o.style.fontSize?`${o.style.fontSize/12}cqw`:'1.4cqw'}}><tbody>{o.cells.map((row,i)=><tr key={i}>{row.map((v,j)=><td key={j} style={i===0?{background:o.fill,fontWeight:700}:undefined}>{v}</td>)}</tr>)}</tbody></table>}
+ {o.kind==='table'&&<ObjectTable object={o} onCell={onCell} onBegin={onCellBegin}/>}
  {o.kind==='chart'&&<ObjectChart object={o}/>}
  {o.kind==='motion'&&o.customSvg&&<img alt={o.name} src={'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(o.customSvg)} style={{width:'100%',height:'100%',objectFit:'contain'}}/>}
- {o.kind==='motion'&&!o.customSvg&&<div style={{width:'100%',height:'100%','--art-color':o.fill,'--orbit-duration':`${o.duration}s`} as CSSProperties}><MotionArt kind={o.motion} strokeWidth={o.strokeWidth}/></div>}
- {overflow&&inspect&&<span className="overflow-badge">文字が枠を超えています</span>}
- </div>;
+ {o.kind==='motion'&&o.motion==='flow'&&o.flow&&<FlowDiagram flow={o.flow} color={o.fill} duration={o.duration} enabled={flowEnabled} playing={playing}/>}
+ {o.kind==='motion'&&o.motion!=='flow'&&!o.customSvg&&<div style={{width:'100%',height:'100%','--art-color':o.fill,'--orbit-duration':`${o.duration}s`} as CSSProperties}><MotionArt kind={o.motion} strokeWidth={o.strokeWidth}/></div>}
+ </div>{overflow&&inspect&&<span className="overflow-badge" role="img" aria-label="文字が枠を超えています" title={o.kind==='table'?'表の文字が枠を超えています。編集タブで列幅・高さを調整するか、「表の列幅と表示」で縮小を有効にしてください。':'文字が枠を超えています。文字枠を広げるか、文字サイズを小さくしてください。'}>!</span>}</>;
 }
-export function FreeObjects({objects,editable=false,linksActive=false,selected=[],onSelect,onChange,onBegin}:{objects:SlideObject[];editable?:boolean;linksActive?:boolean;selected?:string[];onSelect?:(ids:string[])=>void;onChange?:(objects:SlideObject[])=>void;onBegin?:()=>void}){
- const root=useRef<HTMLDivElement>(null);const drag=useRef<{x:number;y:number;objects:SlideObject[];ids:string[];scale:number;resize:boolean;id:string}|null>(null);const [textId,setTextId]=useState('');const [guide,setGuide]=useState<{x?:number;y?:number}>({});
+function imageBounds(o:SlideObject,ratio?:number){
+ if(o.fit!=='contain'||!ratio)return {x:0,y:0,w:o.w,h:o.h};
+ const w=Math.min(o.w,o.h*ratio),h=w/ratio;
+ return {x:(o.w-w)*(o.cropX??50)/100,y:(o.h-h)*(o.cropY??50)/100,w,h};
+}
+function ImageHandles({object:o}:{object:SlideObject}){
+ const [ratio,setRatio]=useState<number>();
+ useEffect(()=>{const img=new Image();img.onload=()=>setRatio(img.naturalWidth/img.naturalHeight);img.src=o.src||'';return()=>{img.onload=null;};},[o.src]);
+ const b=imageBounds(o,ratio);
+ return <>{(['nw','ne','sw','se'] as const).map((corner,i)=><span key={corner} data-object-resize="true" data-corner={corner} className="object-resize image-resize" style={{left:`${(b.x+(corner.includes('e')?b.w:0))/o.w*100}%`,top:`${(b.y+(corner.includes('s')?b.h:0))/o.h*100}%`,right:'auto',bottom:'auto',transform:'translate(-50%,-50%)',cursor:corner==='nw'||corner==='se'?'nwse-resize':'nesw-resize'}} aria-label={`画像の${['左上','右上','左下','右下'][i]}からサイズ変更`}/>)}</>;
+}
+export function FreeObjects({objects,editable=false,imported=false,linksActive=false,flowEnabled=false,playing=true,selected=[],onSelect,onChange,onBegin}:{objects:SlideObject[];editable?:boolean;imported?:boolean;linksActive?:boolean;flowEnabled?:boolean;playing?:boolean;selected?:string[];onSelect?:(ids:string[])=>void;onChange?:(objects:SlideObject[])=>void;onBegin?:()=>void}){
+ const root=useRef<HTMLDivElement>(null);const drag=useRef<{x:number;y:number;objects:SlideObject[];ids:string[];scale:number;resize:boolean;corner:string;id:string;pointerId:number}|null>(null);const [textId,setTextId]=useState('');const [guide,setGuide]=useState<{x?:number;y?:number}>({});
+ const endDrag=()=>{drag.current=null;setGuide({});};
+ useEffect(()=>{
+  const end=(e:PointerEvent)=>{if(drag.current?.pointerId===e.pointerId)endDrag();};
+  const blur=()=>endDrag();
+  const key=(e:KeyboardEvent)=>{if(e.key==='Escape'){endDrag();setTextId('');onSelect?.([]);}};
+  window.addEventListener('pointerup',end,true);window.addEventListener('pointercancel',end,true);window.addEventListener('blur',blur);window.addEventListener('keydown',key);
+  return()=>{window.removeEventListener('pointerup',end,true);window.removeEventListener('pointercancel',end,true);window.removeEventListener('blur',blur);window.removeEventListener('keydown',key);drag.current=null;};
+ },[]);
  const update=(id:string,patch:Partial<SlideObject>)=>onChange?.(objects.map(o=>o.id===id?{...o,...patch}:o));
  return <div ref={root} className="free-objects" style={{pointerEvents:'none'}}>
- {objects.filter(o=>!o.hidden).map(o=><div key={o.id} data-free-object={o.id} data-kind={o.kind} className={`free-object ${editable&&selected.includes(o.id)?'object-selected':''}`} tabIndex={editable?0:undefined} role={editable?'group':undefined} aria-label={o.name} style={{left:`${o.x/16}%`,top:`${o.y/9}%`,width:`${o.w/16}%`,height:`${o.h/9}%`,transform:`rotate(${o.rotation}deg)`,opacity:o.opacity,pointerEvents:editable?'auto':'none',cursor:editable&&!o.locked?'move':undefined}}
+ {objects.filter(o=>!o.hidden).map(o=><div key={o.id} data-free-object={o.id} data-kind={o.kind} className={`free-object ${editable&&selected.includes(o.id)?'object-selected':''}`} tabIndex={editable?0:undefined} role={editable?'group':undefined} aria-label={o.name} style={{left:`${o.x/16}%`,top:`${o.y/9}%`,width:`${o.w/16}%`,height:`${o.h/9}%`,transform:`rotate(${o.rotation}deg)`,opacity:o.opacity,pointerEvents:editable?'auto':'none',cursor:editable?(o.locked?'default':textId===o.id?'text':'move'):undefined}}
  onDoubleClick={e=>{if(editable&&o.kind==='text'&&!o.locked){e.stopPropagation();setTextId(o.id);}}}
- onPointerDown={e=>{if(!editable||textId===o.id)return;e.stopPropagation();e.preventDefault();let ids=selected.includes(o.id)?selected:[o.id];if(e.shiftKey||e.metaKey){ids=selected.includes(o.id)?selected.filter(id=>id!==o.id):[...selected,o.id];}else if(o.groupId)ids=objects.filter(x=>x.groupId===o.groupId).map(x=>x.id);onSelect?.(ids);e.currentTarget.focus();setTextId('');if(o.locked)return;onBegin?.();const r=root.current!.getBoundingClientRect();drag.current={x:e.clientX,y:e.clientY,objects:structuredClone(objects),ids:ids.filter(id=>!objects.find(x=>x.id===id)?.locked),scale:1600/r.width,resize:(e.target as HTMLElement).dataset.objectResize==='true',id:o.id};e.currentTarget.setPointerCapture(e.pointerId);}}
- onPointerMove={e=>{const d=drag.current;if(!d)return;let dx=(e.clientX-d.x)*d.scale,dy=(e.clientY-d.y)*d.scale;const source=d.objects.find(x=>x.id===d.id)!;setGuide({});if(!d.resize&&!e.altKey){const targets=d.objects.filter(x=>!d.ids.includes(x.id)&&!x.hidden);const xs=[0,800,1600,...targets.flatMap(x=>[x.x,x.x+x.w/2,x.x+x.w])],ys=[0,450,900,...targets.flatMap(x=>[x.y,x.y+x.h/2,x.y+x.h])];let gx,gy;for(const x of xs){const match=[source.x+dx,source.x+source.w/2+dx,source.x+source.w+dx].find(v=>Math.abs(v-x)<8);if(match!==undefined){dx+=x-match;gx=x;break;}}for(const y of ys){const match=[source.y+dy,source.y+source.h/2+dy,source.y+source.h+dy].find(v=>Math.abs(v-y)<8);if(match!==undefined){dy+=y-match;gy=y;break;}}setGuide({x:gx,y:gy});}onChange?.(d.objects.map(x=>d.ids.includes(x.id)?d.resize?{...x,w:Math.min(3200,Math.max(20,x.w+dx)),h:Math.min(1800,Math.max(20,x.h+(e.shiftKey?dx*x.h/x.w:dy)))}:{...x,x:Math.max(-1600,Math.min(3200,x.x+dx)),y:Math.max(-900,Math.min(1800,x.y+dy))}:x));}}
+ onPointerDown={e=>{if(!editable||textId===o.id||e.button!==0)return;e.stopPropagation();e.preventDefault();let ids=selected.includes(o.id)?selected:[o.id];if(e.shiftKey||e.metaKey){ids=selected.includes(o.id)?selected.filter(id=>id!==o.id):[...selected,o.id];}else if(o.groupId)ids=objects.filter(x=>x.groupId===o.groupId).map(x=>x.id);onSelect?.(ids);e.currentTarget.focus();setTextId('');if(o.locked)return;onBegin?.();const r=root.current!.getBoundingClientRect();drag.current={x:e.clientX,y:e.clientY,objects:structuredClone(objects).map(item=>{if(item.id!==o.id||o.kind!=='image'||(e.target as HTMLElement).dataset.objectResize!=='true')return item;const img=e.currentTarget.querySelector('img');const b=imageBounds(o,img?.naturalWidth&&img.naturalHeight?img.naturalWidth/img.naturalHeight:undefined);const a=(o.rotation||0)*Math.PI/180,ux=b.x+b.w/2-o.w/2,uy=b.y+b.h/2-o.h/2;return {...item,x:o.x+o.w/2+Math.cos(a)*ux-Math.sin(a)*uy-b.w/2,y:o.y+o.h/2+Math.sin(a)*ux+Math.cos(a)*uy-b.h/2,w:b.w,h:b.h};}),ids:ids.filter(id=>!objects.find(x=>x.id===id)?.locked),scale:1600/r.width,resize:(e.target as HTMLElement).dataset.objectResize==='true',corner:(e.target as HTMLElement).dataset.corner||'se',id:o.id,pointerId:e.pointerId};e.currentTarget.setPointerCapture(e.pointerId);}}
+ onPointerMove={e=>{const d=drag.current;if(!d||d.pointerId!==e.pointerId)return;if(!(e.buttons&1)){endDrag();return;}let dx=(e.clientX-d.x)*d.scale,dy=(e.clientY-d.y)*d.scale;const source=d.objects.find(x=>x.id===d.id)!;setGuide({});if(!d.resize&&!e.altKey){const targets=d.objects.filter(x=>!d.ids.includes(x.id)&&!x.hidden);const xs=[0,800,1600,...targets.flatMap(x=>[x.x,x.x+x.w/2,x.x+x.w])],ys=[0,450,900,...targets.flatMap(x=>[x.y,x.y+x.h/2,x.y+x.h])];let gx,gy;for(const x of xs){const match=[source.x+dx,source.x+source.w/2+dx,source.x+source.w+dx].find(v=>Math.abs(v-x)<8);if(match!==undefined){dx+=x-match;gx=x;break;}}for(const y of ys){const match=[source.y+dy,source.y+source.h/2+dy,source.y+source.h+dy].find(v=>Math.abs(v-y)<8);if(match!==undefined){dy+=y-match;gy=y;break;}}setGuide({x:gx,y:gy});}onChange?.(d.objects.map(x=>d.ids.includes(x.id)?d.resize?x.kind==='image'?resizeImage(x,dx,dy,d.corner):{...x,w:Math.min(3200,Math.max(20,x.w+dx)),h:Math.min(1800,Math.max(20,x.h+(e.shiftKey?dx*x.h/x.w:dy)))}:{...x,x:Math.max(-1600,Math.min(3200,x.x+dx)),y:Math.max(-900,Math.min(1800,x.y+dy))}:x));}}
  onPointerUp={e=>{drag.current=null;setGuide({});if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);}}
- onPointerCancel={()=>{drag.current=null;setGuide({});}}
+ onPointerCancel={endDrag}
+ onLostPointerCapture={endDrag}
  onKeyDown={e=>{if(!editable||textId===o.id)return;if(['Delete','Backspace','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();e.stopPropagation();onBegin?.();const ids=selected.includes(o.id)?selected:[o.id];if(e.key==='Delete'||e.key==='Backspace'){onChange?.(objects.filter(x=>!ids.includes(x.id)||x.locked));return;}onChange?.(objects.map(x=>ids.includes(x.id)&&!x.locked?{...x,x:Math.max(-1600,Math.min(3200,x.x+(e.key==='ArrowRight'?1:e.key==='ArrowLeft'?-1:0)*(e.shiftKey?10:1))),y:Math.max(-900,Math.min(1800,x.y+(e.key==='ArrowDown'?1:e.key==='ArrowUp'?-1:0)*(e.shiftKey?10:1)))}:x));}}}>
- <ObjectBody linksActive={linksActive} object={o} inspect={editable} editing={editable&&textId===o.id&&!o.locked} onText={text=>{update(o.id,{text});setTextId('');}}/>
- {editable&&selected.includes(o.id)&&<><span className="object-name">{o.name}{o.locked?' 🔒':''}</span>{!o.locked&&<span data-object-resize="true" className="object-resize" aria-label="要素のサイズ変更"/>}</>}
+ <ObjectBody onCell={editable&&!o.locked?(row,col,text)=>update(o.id,{cells:o.cells.map((r,i)=>i===row?r.map((v,j)=>j===col?text:v):r)}):undefined} onCellBegin={editable&&!o.locked?()=>{onSelect?.([o.id]);onBegin?.();}:undefined} flowEnabled={flowEnabled} playing={playing} linksActive={linksActive} object={o} imported={imported} inspect={editable} editing={editable&&textId===o.id&&!o.locked} onText={text=>{update(o.id,{text});setTextId('');}}/>
+ {editable&&selected.includes(o.id)&&<><span className="object-name">{o.name}{o.locked?' 🔒':''}</span>{!o.locked&&o.kind==='table'&&<span className="table-move-handle" title="表全体をドラッグして移動" aria-label="表全体を移動">⠿ 移動</span>}{!o.locked&&(o.kind==='image'?<ImageHandles object={o}/>:<span data-object-resize="true" className="object-resize" aria-label="要素のサイズ変更"/>)}</>}
  </div>)}
  {guide.x!==undefined&&<div className="snap-guide vertical" style={{left:`${guide.x/16}%`}}/>}{guide.y!==undefined&&<div className="snap-guide horizontal" style={{top:`${guide.y/9}%`}}/>}
  </div>;

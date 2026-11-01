@@ -1,3 +1,9 @@
+import {editorUxTest} from './editor-ux-e2e.mjs';
+import {backgroundTest} from './background-e2e.mjs';
+import {tableLayoutTest} from './table-layout-e2e.mjs';
+import {textLayoutTest} from './text-layout-e2e.mjs';
+import {codexChatTest} from './codex-chat-e2e.mjs';
+import {slideMotionTest} from './slide-motion-e2e.mjs';
 import {artworkDefaultTest} from './artwork-default-e2e.mjs';
 import {sideImageTest} from './side-image-e2e.mjs';
 import {linksTest} from './links-e2e.mjs';
@@ -28,7 +34,7 @@ for (const [path, mode, dest, expected] of [['/', 'navigate', 'document', 200], 
 }
 console.log('PASS: Host/Origin/cross-site rejection, security headers, split UTF-8 request');
 const deck={...initial,title:'配布テスト',slides:initial.slides.slice(0,1)};const {id}=await api('/api/decks',deck);const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';const {src}=await api('/api/assets',{data:png});deck.slides[0].title='保存の検証';deck.slides[0].objects=[{id:'test-image',name:'テスト画像',kind:'image',src,x:1200,y:600,w:80,h:80}];const saved=await api('/api/deck?deckId='+id,{deck,version:0,requestId:'smoke-save',reason:'配布動作確認',actor:'手動編集'});assert.equal(saved.version,1);await stop();await start(d);const restarted=await api('/api/deck?deckId='+id);assert.equal(restarted.deck.slides[0].title,'保存の検証');assert.equal(restarted.logs.length,1);assert((await fetch(origin+src)).ok);await api('/api/decks?deckId='+id+'&version=1',null,'DELETE');assert(!(await api('/api/decks')).some(x=>x.id===id));await api('/api/trash/restore',{deckId:id});assert((await api('/api/decks')).some(x=>x.id===id));const backup=await api('/api/backup?deckId='+id);backup.chat=[{role:'user',text:'復元確認用の会話',at:new Date().toISOString()}];await stop();await start(await space());const restored=await api('/api/backup/import',backup);const result=await api('/api/deck?deckId='+restored.id);assert.deepEqual(result.deck,restarted.deck);assert.deepEqual(result.logs,restarted.logs);assert.equal((await api('/api/codex/chat?deckId='+restored.id))[0].text,'復元確認用の会話');assert((await fetch(origin+src)).ok);
-browser=await chromium.launch({headless:true,...browserOptions()});const p=await browser.newPage({viewport:{width:1500,height:1000}});await p.goto(origin+'/deck/'+restored.id);await p.getByText('Codex CLIが見つかりません。インストール後に再確認してください。',{exact:true}).waitFor();await p.getByLabel('テキストを編集',{exact:true}).click();assert(await p.locator('.center .slide').isVisible());for(const kind of ['pdf','pptx']){const r=await fetch(origin+'/api/'+kind+'?deckId='+restored.id);assert(r.ok,await r.clone().text());assert((await r.arrayBuffer()).byteLength>1000);}await p.goto(origin);const downloaded=p.waitForEvent('download');await p.getByRole('link',{name:'練習用サンプルをダウンロード'}).click();const dl=await downloaded;assert.equal(dl.suggestedFilename(),'getting-started.json');await p.locator('input[type=file][accept=".json"]').last().setInputFiles(join(release,'public/samples/getting-started.json'));await p.waitForURL('**/deck/*');
+browser=await chromium.launch({headless:true,...browserOptions()});const p=await browser.newPage({viewport:{width:1500,height:1000}});await p.goto(origin+'/deck/'+restored.id);await p.getByText('Codex CLIが見つかりません。インストール後に再確認してください。',{exact:true}).waitFor();await codexChatTest(p);await p.getByLabel('テキストを編集',{exact:true}).click();assert(await p.locator('.center .slide').isVisible());for(const kind of ['pdf','pptx']){const r=await fetch(origin+'/api/'+kind+'?deckId='+restored.id);assert(r.ok,await r.clone().text());assert((await r.arrayBuffer()).byteLength>1000);}await p.goto(origin);const downloaded=p.waitForEvent('download');await p.getByRole('link',{name:'練習用サンプルをダウンロード'}).click();const dl=await downloaded;assert.equal(dl.suggestedFilename(),'getting-started.json');await p.locator('input[type=file][accept=".json"]').last().setInputFiles(join(release,'public/samples/getting-started.json'));await p.waitForURL('**/deck/*');
 await p.getByRole('button',{name:'グリッドビュー',exact:true}).click();
 const grid=p.getByRole('dialog',{name:'スライド一覧',exact:true});await grid.waitFor();
 assert(await grid.locator('.slide-grid-card').count()>1,'全スライドを一覧表示');
@@ -127,5 +133,10 @@ await dragGuidesTest(browser,api,origin,initial);
 await fontSizeTest(browser,api,origin,initial);
 await linksTest(browser,api,origin,initial);
 await sideImageTest(browser,api,origin,initial);
+await textLayoutTest(browser,api,origin,initial);
+await editorUxTest(browser,api,origin,initial);
+await backgroundTest(browser,api,origin,initial);
+await tableLayoutTest(browser,api,origin,initial);
 await artworkDefaultTest(browser,api,origin,initial);
+await slideMotionTest(browser,api,origin,initial);
 console.log('PASS: sample download/import, browser text editing/save, presentation');console.log('PASS: clean startup, no private backgrounds, Codex absent/manual edit, save/restart, trash restore, empty-workspace backup restore incl images/history/chat, PDF/PPTX');}finally{await browser?.close();await stop();for(const d of dirs)await rm(d,{recursive:true,force:true});}

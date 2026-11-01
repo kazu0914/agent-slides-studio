@@ -11,29 +11,29 @@
     "start": "node dist-local/server.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.local.json",
     "test": "node scripts/test.mjs",
-    "test:e2e": "node tests/release-e2e.mjs",
+    "test:e2e": "node tests/release-e2e.mjs && node tests/flow-e2e.mjs && node tests/flow-fixes-e2e.mjs && node tests/slide-limit-e2e.mjs",
     "check:release": "node scripts/check-release.mjs"
   },
   "dependencies": {
+    "@xmldom/xmldom": "^0.9.12",
+    "fflate": "^0.8.3",
+    "lucide-react": "^1.31.0",
+    "pdf-lib": "^1.17.1",
+    "playwright": "^1.63.0",
+    "pptxgenjs": "file:vendor/pptxgenjs",
     "react": "19.2.6",
     "react-dom": "19.2.6",
-    "lucide-react": "^1.31.0",
-    "zod": "^3.25.76",
-    "playwright": "^1.63.0",
-    "pdf-lib": "^1.17.1",
-    "pptxgenjs": "file:vendor/pptxgenjs",
-    "fflate": "^0.8.3",
-    "@xmldom/xmldom": "^0.9.12"
+    "zod": "4.6.7"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "4.20260515.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
-    "@cloudflare/workers-types": "4.20260515.1",
     "@vitejs/plugin-react": "6.0.2",
-    "vite": "8.3.0",
+    "esbuild": "0.28.2",
     "typescript": "5.9.3",
-    "esbuild": "0.28.2"
+    "vite": "8.3.5"
   },
   "type": "module",
   "description": "Local-first agent-native slide editor with visual AI review and decision history",

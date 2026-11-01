@@ -2,7 +2,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {z} from 'zod';
 import {strokeSchema,type Stroke} from '@/lib/model';
-const recordSchema=z.record(z.object({memo:z.string().max(10000),ink:z.array(strokeSchema).max(100)}));
+const recordSchema=z.record(z.string(),z.object({memo:z.string().max(10000),ink:z.array(strokeSchema).max(100)}));
 export type PresentationRecords=z.infer<typeof recordSchema>;
 export function usePresentationRecords(deckId:string){
   const key=`studio-presentation-v1:${deckId}`;

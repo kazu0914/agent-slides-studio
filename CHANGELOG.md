@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Keep extreme image resizing within valid dimensions and positions without moving the opposite corner.
+- Add browser regressions for cell editing, image handles, backgrounds and per-deck page restoration.
+
+- Preserve the selected slide per deck after reload.
+- Resize images from red handles aligned to the visible image corners.
+- Edit table cells directly with reliable first-click focus and a separate move grip.
+- Restore original backgrounds after changing imported slide backgrounds.
+
+- デッキの上限を500枚に統一。追加・複製・貼り付け・テンプレート・AI変更案・PPTX取り込みで検証し、501枚以上は拒否。
+- 工程・分岐の動くフロー図、スライドの登場・切替演出とプレビューを追加。フローの数値手入力、重なりを避けた挿入、接続に沿った読み上げに対応。
+- 外部エージェントの変更案に `baseDeckId`・`baseVersion` を必須化。古い版・別デッキ・未保存編集がある状態での取り込みを拒否。
+- PPTXの表書式・セル内改行・列幅・行高と、文字の折り返し・自動縮小・はみ出し設定を保持。表の複製・CSV/TSV読み込みも改善。
+- Codexモデル一覧の再取得に対応。
+- 依存関係を修正版へ更新（Zod 4.6.7、Vite 8.3.5、source-map-js 1.2.2以降）。Zod 4に合わせてレコード形式と入力エラー処理を更新。
+
 - フォントサイズの手入力中に最小値6へ書き換わる問題を修正。小数入力を保持し、Enter・フォーカス移動で確定、Escapeで取消。
 
 - 編集枠を非表示にするとドラッグ中の整列ガイドまで隠れる問題を修正。

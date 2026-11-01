@@ -23,6 +23,6 @@ Presenter ink is session state and is cleared when the presentation ends.
 
 ## Current limitations
 
-Single user, one AI generation at a time; at most 50 slides and 100 independent objects per slide.
+Single user, one AI generation at a time; at most 500 slides and 100 independent objects per slide.
 Tables: 30 rows × 12 columns. Images: PNG/JPEG/WebP, up to 10MB each. Backups: 150MB.
 Built-in system fonts may differ across operating systems. Animations are flattened on export.

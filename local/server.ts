@@ -1,3 +1,4 @@
+import {MAX_SLIDES} from '../lib/limits.mjs';
 import { createServer } from "node:http";
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync, mkdirSync, existsSync } from "node:fs";
@@ -11,6 +12,7 @@ import {
 } from "../lib/model";
 import {constrainDeck} from "../lib/review";
 import { askCodex, codexStatus } from "./codex.mjs";
+import { generateCodexProposal, parseChatInput } from "./codex-proposal";
 import { renderPdf } from "./pdf";
 import {importPptx} from "./pptx-import";
 import {renderPptx} from "./pptx.mjs";
@@ -251,17 +253,7 @@ createServer(async (req, res) => {
             "AIが処理中です。完了してから再試行してください。",
             409,
           );
-        const input = z
-          .object({
-            prompt: z.string().trim().min(1).max(8000),
-            model: z.string().max(100).optional(),
-            effort: z.string().max(20).optional(),
-            webSearch: z.boolean().default(false),
-            scope:z.object({mode:z.enum(["deck","slide","objects"]),slideId:z.string(),objectIds:z.array(z.string()).max(100)}).optional(),
-            selectedSlideId: z.string(),
-            version: z.number().int(),
-          })
-          .parse(body);
+        const input = parseChatInput(body);
         const current = await repo.workspace(user, id);
         if (current.version !== input.version)
           throw new AppError(
@@ -277,18 +269,15 @@ createServer(async (req, res) => {
             )
             .all(id)
             .reverse();
-          const result = await askCodex(
+          const result = await generateCodexProposal(
             input.prompt,
             current.deck,
             input.selectedSlideId,
             history,
             {model:input.model, effort:input.effort,webSearch:input.webSearch,signal:controller.signal,scope:input.scope},
           );
-          let proposal = result.proposalJson
-            ? proposalSchema.parse(JSON.parse(result.proposalJson))
-            : null;
+          const proposal = result.proposal;
           if(controller.signal.aborted)throw new AppError("生成を停止しました",499);
-          if (proposal){const next=applyProposal(current.deck,proposal);if(input.scope)proposal=proposalSchema.parse({reason:proposal.reason,patches:[],deck:constrainDeck(current.deck,next,input.scope)});}
           const at = new Date().toISOString();
           sqlite
             .prepare("INSERT INTO chat VALUES(?,?,?,?)")
@@ -372,7 +361,7 @@ createServer(async (req, res) => {
           e instanceof AppError
             ? e.message
             : e instanceof z.ZodError
-              ? "入力内容の形式を確認してください。"
+              ? e.issues.find(issue=>issue.code==="too_big"&&issue.origin==="array"&&issue.maximum===MAX_SLIDES)?.message || "入力内容の形式を確認してください。"
               : e instanceof Error
                 ? e.message
                 : "処理に失敗しました。",

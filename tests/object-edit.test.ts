@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {objectSchema,parseGrid,makeObject} from '../lib/objects';
+import {duplicateObjects} from '../lib/object-edit';
+const source=[objectSchema.parse({...makeObject('shape'),id:'a',groupId:'g',x:3200,y:1800,locked:true}),objectSchema.parse({...makeObject('text'),id:'b',groupId:'g'})];
+const copy=duplicateObjects(source,['a','b']);assert.notEqual(copy[0].id,'a');assert.equal(copy[0].groupId,copy[1].groupId);assert.notEqual(copy[0].groupId,'g');assert.equal(copy[0].x,3200);assert.equal(copy[0].y,1800);assert.equal(copy[0].locked,false);copy.forEach(o=>objectSchema.parse(o));assert.equal(source[0].locked,true);
+assert.throws(()=>duplicateObjects(Array.from({length:100},(_,i)=>({...source[0],id:String(i)})),['0']),/100要素/);
+assert.deepEqual(parseGrid('名前,"タブ\t入り"\nA,B'),[['名前','タブ\t入り'],['A','B']]);
+assert.deepEqual(parseGrid('\uFEFF項目\t本文\r\nA\t"1行目\n2行目"'),[['項目','本文'],['A','1行目\n2行目']]);
+assert.deepEqual(parseGrid('A,"B""C",'),[['A','B"C','']]);assert.throws(()=>parseGrid('A,"B'),/引用符/);
+console.log('Object duplication bounds, group identity, limit and quoted CSV/TSV preservation PASS');

@@ -1,4 +1,9 @@
 "use client";
+import {chooseBackground,restoreBackground} from '@/lib/background-edit';
+import {MAX_SLIDES} from "@/lib/limits.mjs";
+import {useDialog} from "./use-dialog";
+import {useSlideMotion} from "./use-slide-motion";
+import {motionLooks,noSlideMotion,type SlideMotion} from "@/lib/slide-motion";
 import {useRangeSelection,emptySelection,type CanvasSelection} from './use-range-selection';
 import {usePresentationRecords} from './use-presentation-records';
 import {alignSelection,type Alignment} from './align-selection';
@@ -8,9 +13,12 @@ import BrandLogo from "./brand-logo";
 import SlideGrid from "./slide-grid";
 import SortableSlides from "./sortable-slides";
 import {useBackgrounds,backgroundLabels,defaultBackground} from "./use-backgrounds";
+import {parseExternalProposal} from '@/lib/external-proposal';
+import {findFlowPlacement} from '@/lib/flow-placement';
+import {flowAgentContract,flowPrompt} from '@/lib/flow-agent.mjs';
 import {FreeObjects,textCss} from "./free-objects";
 import {ObjectPanel,TextStyleControls,uploadImage} from "./object-panel";
-import {makeObject,objectSchema,type SlideObject} from "@/lib/objects";
+import {makeObject,makeFlowObject,objectSchema,type SlideObject} from "@/lib/objects";
 import {layoutPatterns, hasLayoutItems, defaultLayoutItems} from "@/lib/layouts";
 import { MotionArt, motionPresets } from "./motion-art";
 import {
@@ -103,6 +111,7 @@ export function SlideView({
   index,
   total,
   animate = true,
+  motionPlayback = false,
   marker = false,
   color = "yellow",
   penWidth = 18,
@@ -128,6 +137,7 @@ export function SlideView({
   index: number;
   total: number;
   animate?: boolean;
+  motionPlayback?: boolean;
   marker?: boolean;
   color?: Stroke["color"];
   penWidth?: number;
@@ -148,6 +158,7 @@ export function SlideView({
   const slideRoot = useRef<HTMLDivElement>(null);
   const rangeSelection=useRangeSelection(slideRoot,sourceSlide,rangeEnabled&&editable,{cards:cardSelection,objects:objectSelection,elements:baseSelection},onCanvasSelection,onSelectionEdit);
   const slide=rangeSelection.preview?{...sourceSlide,...rangeSelection.preview}:sourceSlide;
+  useSlideMotion(slideRoot,slide,motionPlayback&&!editable&&!editing,animate,revealStep);
   const artworkKind = slide.layout === "image-right" ? "none" :
     slide.artworkKind ??
     (slide.layout === "hero"
@@ -213,7 +224,7 @@ export function SlideView({
           ),
         } as CSSProperties
       }
-      className={`slide ${slide.imported ? "imported-slide" : ""} theme-${slide.backgroundTemplate === "public-midnight" ? "dark" : slide.backgroundTemplate && slide.backgroundTemplate !== "none" ? "white" : slide.theme} layout-${slide.layout} ${!slide.backgroundTemplate || slide.backgroundTemplate === "none" ? (slide.theme !== "white" ? "hero-slide" : "") : ""} ${"motion-" + slide.animation} ${animate ? "" : "motion-paused"} ${editing ? "editing-slide" : ""}`}
+      className={`slide ${slide.motion ? "has-slide-motion" : ""} ${slide.imported ? "imported-slide" : ""} theme-${slide.backgroundTemplate === "public-midnight" ? "dark" : slide.backgroundTemplate && slide.backgroundTemplate !== "none" ? "white" : slide.theme} layout-${slide.layout} ${!slide.backgroundTemplate || slide.backgroundTemplate === "none" ? (slide.theme !== "white" ? "hero-slide" : "") : ""} ${"motion-" + slide.animation} ${animate ? "" : "motion-paused"} ${editing ? "editing-slide" : ""}`}
       data-testid="slide-canvas"
     >
       {slide.layout==='image-right'&&<div className="side-image-panel">{slide.sideImage?<img src={slide.sideImage.src} alt="" style={{objectPosition:`${slide.sideImage.position}% 50%`}}/>:<div className="side-image-placeholder"><span>IMAGE</span><small>右画像・70/30</small></div>}</div>}
@@ -352,7 +363,7 @@ export function SlideView({
           onBegin={() => onGesture?.()}
         />
       )}
-      <FreeObjects linksActive={!editing&&!editable&&!marker} objects={(slide.objects||[]).filter(o=>(o.appearAt||0)<=revealStep)} editable={(editing || editable) && !marker && !!onObjects} selected={objectSelection} onSelect={onObjectSelection} onChange={onObjects} onBegin={onGesture}/>
+      <FreeObjects flowEnabled={motionPlayback&&!editing&&!editable} playing={animate} imported={slide.imported} linksActive={!editing&&!editable&&!marker} objects={(slide.objects||[]).filter(o=>(o.appearAt||0)<=revealStep)} editable={(editing || editable) && !marker && !!onObjects} selected={objectSelection} onSelect={onObjectSelection} onChange={onObjects} onBegin={onGesture}/>
       {!marker&&baseSelection.map(key=><BaseSelectionOutline key={key} host={slideRoot} elementKey={key} slide={slide}/>)}
       {rangeSelection.range&&<div className="canvas-range-selection" data-testid="range-selection" style={{left:`${rangeSelection.range.x}%`,top:`${rangeSelection.range.y}%`,width:`${rangeSelection.range.w}%`,height:`${rangeSelection.range.h}%`}}/>}
       <svg
@@ -541,6 +552,12 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
   const workRef = useRef(work);
   const [loaded, setLoaded] = useState(false);
   const [selected, setSelected] = useState(0);
+  const restoredPosition = useRef('');
+  useEffect(()=>{
+    if(!loaded||restoredPosition.current!==deckId)return;
+    const current=work.deck.slides[selected];if(!current)return;
+    try{localStorage.setItem(`frame-page:${deckId}`,JSON.stringify({id:current.id,index:selected}));}catch{}
+  },[loaded,deckId,selected,work.deck.slides]);
   const [tab, setTab] = useState<"agent" | "edit" | "log">("agent");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -559,7 +576,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
   const aiAbort=useRef<AbortController|null>(null);
   const [proposalVersion, setProposalVersion] = useState(0);
   const [agentError, setAgentError] = useState("");
-  const [agentMode, setAgentMode] = useState<"quick" | "json" | "ai">("quick");
+  const [agentMode, setAgentMode] = useState<"quick" | "json" | "ai">("ai");
   const [aiAvailable, setAiAvailable] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
   const [messages, setMessages] = useState<{ role: string; text: string }[]>(
@@ -568,7 +585,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
   const [connection,setConnection]=useState({state:'checking',message:'Codexの接続を確認しています…'});
   const checkConnection=useCallback(async()=>{
     setConnection({state:'checking',message:'Codexの接続を確認しています…'});
-    try{const r=await fetch('/api/codex/status');if(!r.ok)throw Error();const data=await r.json() as {available:boolean;state:string;message:string;resetsAt?:number};setAiAvailable(data.available);setConnection({state:data.state,message:data.message+(data.resetsAt?' 再開予定: '+new Date(data.resetsAt*1000).toLocaleString('ja-JP'):'')});if(data.available)setAgentMode('ai');else setAgentMode('quick');}catch{setAiAvailable(false);setConnection({state:'connection_error',message:'接続確認に失敗しました。アプリの起動状態を確認してください。'});}
+    try{const r=await fetch('/api/codex/status',{cache:'no-store'});if(!r.ok)throw Error();const data=await r.json() as {available:boolean;state:string;message:string;resetsAt?:number};setAiAvailable(data.available);setConnection({state:data.state,message:data.message+(data.resetsAt?' 再開予定: '+new Date(data.resetsAt*1000).toLocaleString('ja-JP'):'')});}catch{setAiAvailable(false);setConnection({state:'connection_error',message:'接続確認に失敗しました。アプリの起動状態を確認してください。'});}
   },[]);
   useEffect(()=>{void checkConnection();fetch(`/api/codex/chat?deckId=${encodeURIComponent(deckId)}`).then(async r=>{if(r.ok)setMessages(await r.json() as {role:string;text:string}[]);}).catch(()=>{});},[deckId,checkConnection]);
   const [modelCatalog, setModelCatalog] = useState<{model:string;displayName:string;isDefault:boolean;defaultReasoningEffort:string;supportedReasoningEfforts:{reasoningEffort:string}[]}[]>([]);
@@ -576,15 +593,33 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
   const [aiEffort,setAiEffort] = useState("");
   const [webSearch,setWebSearch] = useState(false);
   const [modelError,setModelError] = useState("");
-  useEffect(()=>{if(!aiAvailable||connection.state!=='ready')return;setModelError('');fetch("/api/codex/models").then(async r=>{if(!r.ok)throw Error("モデル一覧を取得できません");return r.json();}).then(result=>{
-    const models=(result as {data: typeof modelCatalog}).data;setModelCatalog(models);
-    const saved=JSON.parse(localStorage.getItem("agent-slides-model")||"null");
-    const selected=models.find((m:{model:string})=>m.model===saved?.model)||models.find((m:{isDefault:boolean})=>m.isDefault)||models[0];
-    if(selected){setAiModel(selected.model);setAiEffort(selected.supportedReasoningEfforts.some((e:{reasoningEffort:string})=>e.reasoningEffort===saved?.effort)?saved.effort:selected.defaultReasoningEffort);}
-  }).catch(e=>setModelError(e.message));},[aiAvailable,connection.state]);
+  const [modelRefresh,setModelRefresh]=useState(0);
+  const [modelsLoading,setModelsLoading]=useState(false);
+  useEffect(()=>{
+    if(!aiAvailable||connection.state!=='ready')return;
+    const controller=new AbortController();
+    setModelError('');setModelsLoading(true);
+    fetch("/api/codex/models",{cache:'no-store',signal:controller.signal}).then(async r=>{
+      if(!r.ok)throw Error("モデル一覧を取得できません");return r.json();
+    }).then(result=>{
+      const models=(result as {data: typeof modelCatalog}).data;
+      if(!Array.isArray(models)||!models.length)throw Error("利用可能なモデルがありません");
+      setModelCatalog(models);
+      let saved:{model?:string;effort?:string}|null=null;
+      try{saved=JSON.parse(localStorage.getItem("agent-slides-model")||"null");}catch{}
+      const selected=models.find(m=>m.model===saved?.model)||models.find(m=>m.isDefault)||models[0];
+      setAiModel(selected.model);
+      setAiEffort(selected.supportedReasoningEfforts.some(e=>e.reasoningEffort===saved?.effort)?saved!.effort!:selected.defaultReasoningEffort);
+    }).catch(e=>{if(!controller.signal.aborted)setModelError(e.message);}).finally(()=>{if(!controller.signal.aborted)setModelsLoading(false);});
+    return ()=>controller.abort();
+  },[aiAvailable,connection.state,modelRefresh]);
   useEffect(()=>{if(aiModel)localStorage.setItem("agent-slides-model",JSON.stringify({model:aiModel,effort:aiEffort}));},[aiModel,aiEffort]);
   async function askAI() {
-    if (aiBusy || !aiAvailable || !prompt.trim()) return;
+    if (aiBusy || !prompt.trim()) return;
+    if (!aiAvailable || connection.state !== 'ready') {
+      setAgentError('Codexへの接続を確認してから再送してください。入力文はそのまま残っています。');
+      return;
+    }
     if (Object.keys(drafts).length) {
       setAgentError(
         "直接編集の変更を保存または取り消してから、AIに指示してください。",
@@ -625,7 +660,6 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
         { role: "user", text },
         { role: "assistant", text: result.answer },
       ]);
-      setPrompt("");
       if (result.proposal) {
         if (result.version !== workRef.current.version)
           throw new Error(
@@ -633,6 +667,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
           );
         stage(result.proposal, {mode:"deck",slideId:"",objectIds:[]});
       }
+      setPrompt(current => current === text ? "" : current);
     } catch (e) {
       setAgentError(controller.signal.aborted?"生成を停止しました。":(e as Error).message);
     } finally {
@@ -703,6 +738,12 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
       const next = await request(deckUrl);
       pending.current = null;
       setWorkspace(next);
+      if(restoredPosition.current!==deckId){
+        try{const saved=JSON.parse(localStorage.getItem(`frame-page:${deckId}`)||'null');
+          if(saved){const index=next.deck.slides.findIndex(s=>s.id===saved.id);setSelected(index>=0?index:Math.max(0,Math.min(Number.isInteger(saved.index)?saved.index:0,next.deck.slides.length-1)));}
+        }catch{}
+        restoredPosition.current=deckId;
+      }
       setLoaded(true);
     } catch (e) {
       setError((e as Error).message);
@@ -1023,6 +1064,10 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
     if(layout==='image-right')setDrafts(d=>({...d,[slide.id]:{...(d[slide.id]??slide),layout,theme:'white',backgroundTemplate:'none',backgroundColor:'#ffffff'}}));
     if(hasLayoutItems(layout) && !draft.items.length) setDrafts(d=>({...d,[slide.id]:{...(d[slide.id]??slide),layout,items:defaultLayoutItems(layout)}}));
   }
+  function changeBackground(choice:Parameters<typeof chooseBackground>[1]|null){
+    recordDraft(`${slide.id}:background`,true);setDraftError('');
+    setDrafts(d=>{if(!d[slide.id])draftBases.current[slide.id]=structuredClone(slide);const current=d[slide.id]??slide;return {...d,[slide.id]:choice?chooseBackground(current,choice):restoreBackground(current)};});
+  }
   function changeDraft<K extends keyof Slide>(key: K, value: Slide[K]) {
     recordDraft(`${slide.id}:${String(key)}`);
     setDraftError("");
@@ -1081,7 +1126,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
         const copied=slideSchema.parse(data.agentSlidesSlide);
         if(Object.keys(drafts).length||pending.current){setError('編集中の内容の保存が完了してから、スライドを貼り付けてください。');return;}
         const next=structuredClone(workRef.current.deck);
-        if(next.slides.length>=50){setError('スライドは50枚までです。');return;}
+        if(next.slides.length>=MAX_SLIDES){setError(`スライドは${MAX_SLIDES}枚までです。`);return;}
         const groups=new Map<string,string>();
         copied.id=crypto.randomUUID();
         copied.objects=copied.objects?.map(o=>{if(o.groupId&&!groups.has(o.groupId))groups.set(o.groupId,crypto.randomUUID());return {...o,id:crypto.randomUUID(),groupId:o.groupId?groups.get(o.groupId):undefined};});
@@ -1099,6 +1144,22 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
       e.preventDefault();changeDraft('objects',[...(draft.objects||[]),...copies]);setObjectSelection(copies.map(o=>o.id));setTab('edit');setLayoutEditing(false);return;
     }catch{}
     const file=Array.from(e.clipboardData.files).find(f=>f.type.startsWith('image/'));if(file){e.preventDefault();void insertImage(file);}
+  }
+  function addFlow(kind:'serial'|'branch') {
+    if(locked||(draft.objects?.length||0)>=100)return;
+    const canvas=document.querySelector<HTMLElement>('.center .slide');
+    if(!canvas){setDraftError('キャンバスを表示してから、もう一度追加してください。');return;}
+    const frame=canvas.getBoundingClientRect();
+    if(!frame.width||!frame.height)return;
+    const selectors='[data-edit-element="title"],[data-edit-element="body"],[data-edit-element="eyebrow"],.slide-item,[data-free-object],.artwork-position,.statement-arrow,.side-image-panel,.slide-footer>span,.ink-layer polyline';
+    const obstacles=Array.from(canvas.querySelectorAll<HTMLElement|SVGElement>(selectors)).filter(el=>{
+      const style=getComputedStyle(el);
+      return style.display!=='none'&&style.visibility!=='hidden'&&Number(style.opacity)>0&&(!el.matches('[data-edit-element="title"],[data-edit-element="body"],[data-edit-element="eyebrow"]')||!!el.textContent?.trim());
+    }).map(el=>{const r=el.getBoundingClientRect();return {x:(r.left-frame.left)/frame.width*1600,y:(r.top-frame.top)/frame.height*900,w:r.width/frame.width*1600,h:r.height/frame.height*900};}).filter(r=>r.w>0&&r.h>0);
+    const placement=findFlowPlacement(obstacles);
+    if(!placement){setDraftError('フロー図を置く空き領域がありません。既存の要素を移動するか、新しいスライドに追加してください。');return;}
+    const object={...makeFlowObject(kind),...placement};
+    changeDraft('objects',[...(draft.objects||[]),object]);setObjectSelection([object.id]);setLayoutEditing(false);
   }
   function addMotion(kind:string,point?:{x:number;y:number}) {
     if(locked || (draft.objects?.length||0)>=100)return;
@@ -1256,6 +1317,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
     }
   }
   function addSlide() {
+    if(locked||workRef.current.deck.slides.length>=MAX_SLIDES)return;
     const id = crypto.randomUUID();
     const next = structuredClone(work.deck);
     next.slides.push({
@@ -1280,6 +1342,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
       .catch(() => {});
   }
   function duplicate() {
+    if(locked||workRef.current.deck.slides.length>=MAX_SLIDES)return;
     const next = structuredClone(work.deck);
     next.slides.splice(selected + 1, 0, {
       ...structuredClone(slide),
@@ -1322,8 +1385,8 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
     if(present)presentationRecords.update(slide.id,{ink:(presentationRecords.records[slide.id]?.ink||[]).slice(0,-1)});
     else setSessionInk(ink => ({...ink, [slide.id]: (ink[slide.id] || []).slice(0,-1)}));
   }
-  function stage(input: unknown, scope:Scope={mode:aiScope,slideId:slide.id,objectIds:objectSelection}) {
-    const raw = proposalSchema.parse(input);
+  function stage(input: unknown, scope:Scope={mode:aiScope,slideId:slide.id,objectIds:objectSelection}, external=false) {
+    const raw = external ? parseExternalProposal(input,{deckId,version:workRef.current.version},Object.keys(drafts).length>0||busy.current||!!pending.current) : proposalSchema.parse(input);
     const scoped=constrainDeck(workRef.current.deck,applyProposal(workRef.current.deck,raw),scope);
     const p = proposalSchema.parse({reason:raw.reason,patches:[],deck:scoped});
     applyProposal(workRef.current.deck, p);
@@ -1346,7 +1409,14 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
     }
     try {
       if (agentMode === "json") {
-        stage(JSON.parse(value));
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(value);
+        } catch {
+          throw new Error('この欄はJSON形式の変更提案専用です。文章での依頼は「AI対話」に切り替えて送信してください。入力文はそのまま残っています。');
+        }
+        setProposal(null);
+        stage(parsed,undefined,true);
         return;
       }
       const changes: Partial<Slide> = {};
@@ -1363,7 +1433,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
       else if (/オービット|回転/.test(value)) changes.animation = "orbit";
       if (!Object.keys(changes).length)
         throw new Error(
-          "クイック操作はタイトル・本文の引用指定、背景色、アニメーションに対応しています。自由な構成変更には「エージェント連携」のJSON提案を使えます。",
+          "クイック操作はタイトル・本文の引用指定、背景色、アニメーションに対応しています。文章による構成変更や提案書の作成は「AI対話」で依頼してください。",
         );
       stage({ reason: value, patches: [{ slideId: slide.id, changes }] });
     } catch (e) {
@@ -1421,6 +1491,8 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
         inputSchema: {
           type: "object",
           properties: {
+            baseDeckId: { type: "string", description: "read_slidesで取得したdeckId" },
+            baseVersion: { type: "integer", description: "read_slidesで取得したversion。変更せず返します。" },
             reason: { type: "string" },
             deck: { type: "object", description: "全体生成・再構成時の完全なデッキ。patchesは空配列にします。" },
             patches: {
@@ -1436,13 +1508,14 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
               },
             },
           },
-          required: ["reason", "patches"],
+          required: ["baseDeckId", "baseVersion", "reason", "patches"],
           additionalProperties: false,
         },
         annotations: { readOnlyHint: false },
         execute: async (input: unknown) => {
           setAgentMode("json");
-          return stage(input);
+          setProposal(null);
+          return stage(input,undefined,true);
         },
       },
       {
@@ -1490,7 +1563,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
       lifecycle.abort();
       delete (window as unknown as { frameAgent?: unknown }).frameAgent;
     };
-  }, [commit, deckId, aiScope, slide.id, objectSelection]);
+  }, [commit, deckId, aiScope, slide.id, objectSelection, drafts]);
   function advancePresentation(){const n=nextStep(slide,revealStep);if(n!==undefined)setRevealStep(n);else setSelected(i=>Math.min(i+1,work.deck.slides.length-1));}
   function backPresentation(){if(revealStep>0)setRevealStep(previousStep(slide,revealStep));else setSelected(i=>Math.max(0,i-1));}
   function openPresenter(){presenterWindow.current=window.open('/presenter?session='+presenterToken.current,'presenter-'+presenterToken.current,'popup,width=1280,height=900');if(!presenterWindow.current)setError('発表者画面を開けませんでした。ポップアップを許可してください。');}
@@ -1735,7 +1808,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
             <button className="sidebar-toggle" aria-label="スライド一覧を閉じる" title="スライド一覧を閉じる" aria-expanded={!slidesCollapsed} aria-controls="slides-sidebar" onClick={()=>setSlidesCollapsed(true)}><PanelLeft size={15}/></button> スライド{" "}
             <span>{work.deck.slides.length}</span>
             <button
-              disabled={locked || work.deck.slides.length >= 50}
+              disabled={locked || work.deck.slides.length >= MAX_SLIDES}
               onClick={addSlide}
               aria-label="スライドを追加"
             >
@@ -1764,7 +1837,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
           </SortableSlides>
           <button
             className="add-slide"
-            disabled={locked || work.deck.slides.length >= 50}
+            disabled={locked || work.deck.slides.length >= MAX_SLIDES}
             onClick={addSlide}
           >
             <Plus size={15} /> スライドを追加
@@ -2026,6 +2099,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
             </div>
           </div>
           {drafts[slide.id] && <div className="autosave-notice" role="status">{autosaveError ? "自動保存できませんでした。変更内容はこのブラウザに保持されています。" : presentAfterSave ? "保存完了後にプレゼンを開始します…" : saving ? "保存中…" : "自動保存待ち…"}{autosaveError && <><p role="alert">{autosaveError}</p><button onClick={()=>{setAutosaveError("");if(pending.current)void retry();}}>保存を再試行</button></>}{draftError && <p role="alert">{draftError}</p>}</div>}
+          {!drafts[slide.id]&&draftError&&<div className="inline-error" role="alert">{draftError}<button type="button" onClick={()=>setDraftError('')}>閉じる</button></div>}
           <section className={`notes ${notesOpen ? "" : "notes-collapsed"}`}>
             <div>
               <button
@@ -2110,8 +2184,8 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                 </div>
                 <div className="codex-connection" role="status"><span>{connection.message}</span><button disabled={connection.state==='checking'||aiBusy} onClick={()=>void checkConnection()}>再確認</button><small>{aiAvailable?"Web検索は下のチェックで有効にできます。社内資料は必要な範囲だけ共有してください。":"AI対話とWeb検索にはCodexへの接続が必要です。"}</small></div>
                 <div className="agent-mode">
-                  {aiAvailable && (
                     <button
+                      disabled={aiBusy}
                       className={agentMode === "ai" ? "chosen" : ""}
                       onClick={() => {
                         setAgentMode("ai");
@@ -2121,24 +2195,23 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                     >
                       AI対話
                     </button>
-                  )}
                   <button
+                    disabled={aiBusy}
                     className={agentMode === "quick" ? "chosen" : ""}
                     onClick={() => {
                       setAgentMode("quick");
                       setProposal(null);
-                      setPrompt("");
                       setAgentError("");
                     }}
                   >
                     クイック操作
                   </button>
                   <button
+                    disabled={aiBusy}
                     className={agentMode === "json" ? "chosen" : ""}
                     onClick={() => {
                       setAgentMode("json");
                       setProposal(null);
-                      setPrompt("");
                       setAgentError("");
                     }}
                   >
@@ -2146,10 +2219,11 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                   </button>
                 </div>
                 {agentMode === "ai" ? (
-                  <div className="ai-chat">
+                  <div className="ai-chat"><button type="button" className="suggestion" disabled={aiBusy} onClick={()=>setPrompt(flowPrompt)}>動くフロー図を依頼する</button>
                     <p className="mode-help">
                       MacのCodexに接続。現在のデッキを読み取り、変更案を作ります。
                     </p>
+                    {(!aiAvailable || connection.state !== 'ready') && <p className="mode-help">接続が完了すると送信できます。文章を入力したまま「再確認」を押せます。</p>}
                     {messages.map((m, i) => (
                       <div key={i} className={`ai-message ai-${m.role}`}>
                         <small>{m.role === "user" ? "あなた" : "Codex"}</small>
@@ -2189,15 +2263,21 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                   </>
                 ) : (
                   <div className="connection-info">
+                    <p>この欄はJSON専用です。提案書の作成など、文章での依頼は「AI対話」で送信してください。</p>
                     <p>
-                      Codexなどのエージェントから、スライドを読み取り・変更できます。APIキーは不要です。
+                      CodexやClaude Codeに、現在のデッキとフロー図の生成仕様を渡せます。返された変更案JSONをこの欄に貼り付け、比較して適用します。
                     </p>
                     <button
                       className="suggestion"
+                      disabled={locked||Object.keys(drafts).length>0}
                       onClick={() => {
                         download("frame-agent-context.json", {
+                          deckId,
                           workspace: work,
+                          flowGeneration: flowAgentContract,
                           schema: {
+                            baseDeckId: deckId,
+                            baseVersion: work.version,
                             reason: "変更する理由",
                             patches: [
                               {
@@ -2217,6 +2297,8 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                         setPrompt(
                           JSON.stringify(
                             {
+                              baseDeckId: deckId,
+                              baseVersion: work.version,
                               reason: "伝えたいメッセージを明確にする",
                               patches: [
                                 {
@@ -2236,7 +2318,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                       JSONの例を挿入 <Code2 size={13} />
                     </button>
                     <p>
-                      対応ブラウザではWebMCPを利用できます。JSON提案を下に貼り付けることもできます。
+                      保存完了後に現在の内容を渡してください。生成元のデッキID・版番号を含むJSON提案を比較して適用します。古い形式の提案は再生成が必要です。対応ブラウザではWebMCPも利用できます。
                     </p>
                   </div>
                 )}
@@ -2290,6 +2372,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                 {aiBusy&&<button type="button" className="stop-generation" onClick={()=>aiAbort.current?.abort()}>生成を停止</button>}
                 <textarea
                   aria-label="エージェントへの指示"
+                  disabled={aiBusy}
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder={
@@ -2304,13 +2387,13 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                 <div>
                   <span>
                     {agentMode === "ai"
-                      ? <span className="ai-model-controls"><select aria-label="AIモデル" value={aiModel} disabled={aiBusy || !modelCatalog.length} onChange={e=>{setAiModel(e.target.value);setAiEffort(modelCatalog.find(m=>m.model===e.target.value)?.defaultReasoningEffort || "");}}>{!modelCatalog.length && <option value="">{modelError || "モデル読込中…"}</option>}{modelCatalog.map(m=><option key={m.model} value={m.model}>{m.displayName || m.model}</option>)}</select><select aria-label="Reasoning effort" value={aiEffort} disabled={aiBusy || !aiModel} onChange={e=>setAiEffort(e.target.value)}>{modelCatalog.find(m=>m.model===aiModel)?.supportedReasoningEfforts.map(e=><option key={e.reasoningEffort} value={e.reasoningEffort}>{e.reasoningEffort}</option>)}</select></span>
+                      ? <span className="ai-model-controls"><select aria-label="AIモデル" value={aiModel} disabled={aiBusy || !modelCatalog.length} onChange={e=>{setAiModel(e.target.value);setAiEffort(modelCatalog.find(m=>m.model===e.target.value)?.defaultReasoningEffort || "");}}>{!modelCatalog.length && <option value="">{modelError || "モデル読込中…"}</option>}{modelCatalog.map(m=><option key={m.model} value={m.model}>{m.displayName || m.model}</option>)}</select><select aria-label="Reasoning effort" value={aiEffort} disabled={aiBusy || !aiModel} onChange={e=>setAiEffort(e.target.value)}>{modelCatalog.find(m=>m.model===aiModel)?.supportedReasoningEfforts.map(e=><option key={e.reasoningEffort} value={e.reasoningEffort}>{e.reasoningEffort}</option>)}</select><button type="button" aria-label="モデル一覧を更新" title="Codexから最新のモデル一覧を取得" disabled={aiBusy||modelsLoading} onClick={()=>setModelRefresh(n=>n+1)}>{modelsLoading?'更新中…':'モデル更新'}</button>{modelError&&<span role="alert">{modelError}</span>}</span>
                       : agentMode === "quick"
                         ? "選択中のスライド"
                         : "構造化された変更提案"}
                   </span>
                   <button
-                    disabled={locked || aiBusy || !prompt.trim()}
+                    disabled={locked || aiBusy || !prompt.trim() || (agentMode === 'ai' && (!aiAvailable || connection.state !== 'ready'))}
                     aria-label="変更案を作成"
                   >
                     <ArrowUp size={16} />
@@ -2344,7 +2427,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                   <button
                     aria-label="スライドを複製"
                     title="複製"
-                    disabled={locked || work.deck.slides.length >= 50}
+                    disabled={locked || work.deck.slides.length >= MAX_SLIDES}
                     onClick={duplicate}
                   >
                     <Copy size={14} />
@@ -2361,7 +2444,8 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
               </div>
               <details className="base-text-style"><summary>クリックで順に表示</summary><p>0は最初から表示。同じ番号の要素は同時に表示します。</p>{(['title','body','eyebrow','items','artwork'] as const).map((key,i)=><label key={key}>{['タイトル','本文','ラベル','項目','装飾'][i]}<input aria-label={`クリック順番 ${key}`} type="number" min="0" max="100" value={draft.revealSteps?.[key]||0} onChange={e=>changeDraft('revealSteps',{...draft.revealSteps,[key]:Math.min(100,Math.max(0,Math.round(Number(e.target.value))))})}/></label>)}</details>
               {(draft.layout!=='image-right'&&(draft.artworkKind??(draft.layout==='hero'?'orbit':draft.layout==='statement'?'arrow':'none'))!=='none')&&<div className="existing-artwork-control"><span>スライドの装飾</span><button type="button" onClick={()=>changeDraft('artworkKind','none')}>このスライドの装飾を削除</button></div>}
-              <ObjectPanel objects={draft.objects||[]} selected={objectSelection} onSelect={ids=>{setObjectSelection(ids);setLayoutEditing(false);}} onChange={objects=>changeDraft("objects",objects)} onError={setDraftError} onImage={insertImage}/>
+              <SlideMotionControls slide={draft} index={selected} total={work.deck.slides.length} onChange={motion=>changeDraft("motion",motion)}/>
+              <ObjectPanel onAddFlow={addFlow} onGenerateFlow={()=>{setAgentMode("ai");setTab("agent");setPrompt(flowPrompt);}} objects={draft.objects||[]} selected={objectSelection} onSelect={ids=>{setObjectSelection(ids);setLayoutEditing(false);}} onChange={objects=>changeDraft("objects",objects)} onError={setDraftError} onImage={insertImage}/>
               <details className="base-text-style"><summary>既存の文字の書式</summary><label>対象<select aria-label="書式を変更する文字" value={styleTarget} onChange={e=>setStyleTarget(e.target.value as typeof styleTarget)}><option value="title">タイトル</option><option value="body">本文</option><option value="eyebrow">ラベル</option><option value="items">項目</option></select></label><TextStyleControls style={draft.textStyles?.[styleTarget]||{}} onChange={style=>changeDraft("textStyles",{...draft.textStyles,[styleTarget]:style})}/><button type="button" onClick={()=>{if(styleTarget==='items')changeDraft('items',draft.items.map(item=>({...item,body:item.body.split('\n').map(t=>t.startsWith('• ')?t.slice(2):`• ${t}`).join('\n')})));else changeDraft(styleTarget,draft[styleTarget].split('\n').map(t=>t.startsWith('• ')?t.slice(2):`• ${t}`).join('\n'));}}>箇条書きを切替</button><p>赤い下線は文字のはみ出しを示します。サイズ・位置・改行を調整してください。</p></details>
               {draft.layout==='image-right'&&<SideImageControl key={draft.id} value={draft.sideImage} onChange={value=>changeDraft('sideImage',value)} onError={setDraftError}/>}
               <section className="layout-library">
@@ -2452,8 +2536,9 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
                   背景
                   <select
                     value={draft.theme}
+                    aria-label="背景色"
                     onChange={(e) =>
-                      changeDraft("theme", e.target.value as Slide["theme"])
+                      changeBackground({theme:e.target.value as Slide["theme"]})
                     }
                   >
                     {Object.entries(themes).map(([v, t]) => (
@@ -2466,17 +2551,17 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
               </div>
               <section className="background-templates">
                 <h3>背景テンプレート</h3>
-                <p>選ぶと現在のスライドに反映され、自動保存されます。</p>
+                <p>選ぶと現在のスライドに反映され、自動保存されます。取り込んだ全面背景は削除せず非表示にし、「元の背景に戻す」で復元できます。</p>
                 {!backgrounds.length&&<p>同梱の背景画像はありません。背景色や画像要素を利用できます。</p>}
                 <div className="background-grid">
                   {backgrounds.map((id) => (
-                    <button type="button" key={id} aria-label={`背景テンプレート ${backgroundLabels[id] || `背景 ${id.replace("bg_", "")}`}`} aria-pressed={draft.backgroundTemplate === id} onClick={() => changeDraft("backgroundTemplate", id)}>
+                    <button type="button" key={id} aria-label={`背景テンプレート ${backgroundLabels[id] || `背景 ${id.replace("bg_", "")}`}`} aria-pressed={draft.backgroundTemplate === id} onClick={() => changeBackground({template:id})}>
                       <img src={`/backgrounds/${id}.png`} alt="" loading="lazy" />
                       <span>{backgroundLabels[id] || `背景 ${id.replace("bg_", "")}`}{draft.backgroundTemplate === id ? " · 選択中" : ""}</span>
                     </button>
                   ))}
                 </div>
-                <button type="button" className="background-reset" disabled={!draft.backgroundTemplate || draft.backgroundTemplate === "none"} onClick={() => changeDraft("backgroundTemplate", "none")}>テンプレートを解除</button>
+                <button type="button" className="background-reset" disabled={!draft.backgroundOriginal && (!draft.backgroundTemplate || draft.backgroundTemplate === "none")} onClick={() => changeBackground(null)}>元の背景に戻す</button>
               </section>
               <section className="placement-fields">
                 <h3>要素の配置・サイズ</h3>
@@ -2795,6 +2880,7 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
               }}
             >
               <SlideView
+                motionPlayback
                 revealStep={revealStep}
                 key={"present" + slide.id + replay}
                 slide={visibleSlide}
@@ -2927,4 +3013,18 @@ export default function Home({ deckId = "legacy" }: { deckId?: string }) {
 function SideImageControl({value,onChange,onError}:{value:Slide['sideImage'];onChange:(value:Slide['sideImage'])=>void;onError:(message:string)=>void}) {
  const [busy,setBusy]=useState(false);
  return <section className="side-image-control"><h3>右側の画像</h3><p>画像を右3割いっぱいに表示します。</p><label>{busy?'読み込み中…':'画像を選ぶ・差し替える'}<input type="file" aria-label="右側の画像を選ぶ" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={async e=>{const file=e.target.files?.[0];e.target.value='';if(!file)return;setBusy(true);try{onChange({src:await uploadImage(file),position:50});}catch(error){onError((error as Error).message);}finally{setBusy(false);}}}/></label>{value&&<><label>切り抜き位置<input aria-label="右画像の切り抜き位置" type="range" min="0" max="100" value={value.position} onChange={e=>onChange({...value,position:Number(e.target.value)})}/></label><button type="button" onClick={()=>onChange(null)}>画像を外す</button></>}</section>;
+}
+
+function SlideMotionControls({slide,index,total,onChange}:{slide:Slide;index:number;total:number;onChange:(value:SlideMotion)=>void}){
+ const [preview,setPreview]=useState(false),[replay,setReplay]=useState(0),[step,setStep]=useState(0);
+ const dialog=useDialog(preview,()=>setPreview(false));const m=slide.motion??noSlideMotion;
+ return <section className="slide-motion-controls"><h3>スライドの演出</h3><p>文字・カードの登場と、スライドの切り替え。</p>
+ <div className="motion-look-grid">{motionLooks.map(look=><button type="button" key={look.id} title={look.description} aria-pressed={JSON.stringify(m)===JSON.stringify(look.value)} onClick={()=>onChange({...look.value})}>{look.name}</button>)}</div>
+ <label>登場の動き<select aria-label="登場の動き" value={m.entrance} onChange={e=>onChange({...m,entrance:e.target.value as SlideMotion['entrance']})}><option value="none">なし</option><option value="rise">下からフェード</option><option value="zoom">順にズームイン</option><option value="wipe">横からワイプ</option></select></label>
+ <label>スライド切り替え<select aria-label="スライド切り替え" value={m.transition} onChange={e=>onChange({...m,transition:e.target.value as SlideMotion['transition']})}><option value="none">なし</option><option value="fade">フェード</option><option value="push">横スライド</option><option value="zoom">ズーム</option></select></label>
+ <div className="motion-setting-row"><label>強さ<select aria-label="演出の強さ" value={m.intensity} onChange={e=>onChange({...m,intensity:e.target.value as SlideMotion['intensity']})}><option value="gentle">控えめ</option><option value="standard">標準</option><option value="bold">強め</option></select></label><label>速さ<select aria-label="演出の速さ" value={m.tempo} onChange={e=>onChange({...m,tempo:e.target.value as SlideMotion['tempo']})}><option value="slow">ゆっくり</option><option value="normal">標準</option><option value="fast">速め</option></select></label></div>
+ <button type="button" onClick={()=>{setStep(0);setReplay(n=>n+1);setPreview(true);}}>演出をプレビュー</button><button type="button" onClick={()=>onChange({...noSlideMotion})}>演出をオフ</button>
+ <p>プレゼン中に再生します。PDF・PPTXは静止状態で出力します。</p>
+ {preview&&<div className="slide-motion-preview" role="dialog" aria-modal="true" aria-label="演出プレビュー" ref={el=>{dialog.current=el;}}><header><strong>演出プレビュー</strong><button type="button" onClick={()=>{setStep(0);setReplay(n=>n+1);}}>最初から再生</button><button type="button" onClick={()=>setPreview(false)}>プレビューを閉じる</button></header><div className="slide-motion-preview-canvas"><SlideView key={slide.id+replay} slide={slide} index={index} total={total} motionPlayback revealStep={step}/></div><footer><span>クリック表示も確認できます。</span><button type="button" disabled={nextStep(slide,step)===undefined} onClick={()=>setStep(nextStep(slide,step)??step)}>次の表示</button></footer></div>}
+ </section>;
 }

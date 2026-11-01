@@ -1,3 +1,5 @@
+import {MAX_SLIDES} from './limits.mjs';
+import {slideMotionSchema} from "./slide-motion";
 import { z } from "zod";
 import {objectSchema,textStyleSchema} from "./objects";
 export const strokeSchema = z.object({
@@ -17,9 +19,11 @@ export const slideSchema = z.object({
   theme: z.enum(["blue", "white", "dark"]),
   sideImage: z.object({src:z.string().regex(/^\/api\/assets\/[a-f0-9-]+\.(png|jpg|webp)$/),position:z.number().min(0).max(100).default(50)}).nullable().optional(),
   imported: z.boolean().optional(),
+  backgroundOriginal: z.object({theme:z.enum(['blue','white','dark']),color:z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),template:z.enum(["none", "bg_1", "bg_2", "bg_3", "bg_4", "bg_5", "bg_6", "public-blue", "public-green", "public-orange", "public-sunshine", "public-hearts", "public-pop-geometry", "public-paper-pastel", "public-memphis", "public-soft-3d", "public-aurora", "public-sunset", "public-midnight", "public-fresh-mint"]).optional(),hiddenIds:z.array(z.string().max(80)).max(100)}).optional(),
   backgroundColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   backgroundTemplate: z.enum(["none", "bg_1", "bg_2", "bg_3", "bg_4", "bg_5", "bg_6", "public-blue", "public-green", "public-orange", "public-sunshine", "public-hearts", "public-pop-geometry", "public-paper-pastel", "public-memphis", "public-soft-3d", "public-aurora", "public-sunset", "public-midnight", "public-fresh-mint"]).optional(),
   animation: z.enum(["orbit", "reveal", "none"]),
+  motion: slideMotionSchema.optional(),
   artworkKind: z.enum(["holo-cards",'holo-database','holo-server','holo-target','holo-funnel','holo-pyramid','holo-solar','holo-gears','holo-platform','holo-honeycomb','holo-equalizer','holo-prism','holo-chart','holo-network','holo-flow','holo-grid','holo-document','holo-shield','holo-cloud','holo-compare','holo-timeline', "orbit", "arrow", "none", "cube", "globe", "rings", "helix", "crystal", "wave", "particles", "pulse", "bars"]).optional(),
   revealSteps:z.object({title:z.number().int().min(0).max(100).optional(),body:z.number().int().min(0).max(100).optional(),eyebrow:z.number().int().min(0).max(100).optional(),items:z.number().int().min(0).max(100).optional(),artwork:z.number().int().min(0).max(100).optional()}).optional(),
   notes: z.string().max(20000),
@@ -56,7 +60,7 @@ export const slideSchema = z.object({
 export const deckSchema = z
   .object({
     title: z.string().min(1).max(100),
-    slides: z.array(slideSchema).min(1).max(50),
+    slides: z.array(slideSchema).min(1).max(MAX_SLIDES, `スライドは${MAX_SLIDES}枚までです。`),
   })
   .superRefine((d, c) => {
     for(const slide of d.slides){if(new Set((slide.objects||[]).map(o=>o.id)).size!==(slide.objects||[]).length)c.addIssue({code:"custom",message:"要素IDが重複しています"});}
@@ -90,7 +94,10 @@ export const fieldNames: Record<string, string> = {
   sideImage: "右側の画像",
   theme: "背景",
   backgroundTemplate: "背景テンプレート",
+  backgroundColor: "背景色",
+  backgroundOriginal: "元の背景の復元情報",
   animation: "アニメーション",
+  motion: "スライドの演出",
   artworkKind: "装飾の追加・削除",
   arrowWidth: "矢印の太さ",
   artworkColor: "アニメーションの色",
@@ -310,7 +317,7 @@ export const patchSchema = z.object({
 export const proposalSchema = z
   .object({
     reason: z.string().min(1).max(1000),
-    patches: z.array(patchSchema).max(50).default([]),
+    patches: z.array(patchSchema).max(MAX_SLIDES, `変更案は${MAX_SLIDES}件までです。`).default([]),
     deck: deckSchema.optional(),
   })
   .refine(
